@@ -95,6 +95,9 @@
   .toolbar input[type=search]{
     flex: 1 1 220px;
   }
+  .toolbar select{
+    flex: 0 1 170px;
+  }
   .btn-primary{
     background: var(--copper);
     color: #fff;
@@ -144,9 +147,15 @@
     color: var(--ink-soft); font-size: 0.85rem; font-style: italic;
   }
   .card .label{
-    padding: 0.6rem 0.7rem 0.8rem;
+    padding: 0.6rem 0.7rem 0.2rem;
     font-size: 0.98rem;
     line-height: 1.3;
+  }
+  .card .category{
+    padding: 0 0.7rem 0.7rem;
+    font-size: 0.78rem;
+    color: var(--copper-dark);
+    font-style: italic;
   }
 
   .empty-state{
@@ -295,6 +304,9 @@
   <section id="view-list">
     <div class="toolbar">
       <input type="search" id="searchInput" placeholder="Sök bland dina recept…">
+      <select id="categoryFilter">
+        <option value="">Alla kategorier</option>
+      </select>
       <button class="btn-primary" id="newRecipeBtn" type="button" disabled>Ansluter…</button>
     </div>
     <div class="grid" id="recipeGrid"></div>
@@ -335,6 +347,10 @@
         <label for="fTitle">Titel</label>
         <input type="text" id="fTitle" required>
 
+        <label for="fCategory">Kategori</label>
+        <input type="text" id="fCategory" list="categoryOptions" placeholder="t.ex. Huvudrätt, Bakning, Efterrätt…">
+        <datalist id="categoryOptions"></datalist>
+
         <label>Bild</label>
         <div class="image-pick-row">
           <img class="preview" id="fImagePreview" alt="" hidden>
@@ -363,6 +379,7 @@
     <a href="#" class="back-link" id="backFromDetail">← Alla recept</a>
     <img class="detail-image" id="dImage" alt="" hidden>
     <h1 class="detail-title" id="dTitle"></h1>
+    <div class="detail-source" id="dCategory" style="font-style:italic;color:var(--copper-dark);"></div>
     <div class="detail-source" id="dSource"></div>
 
     <div class="detail-section" id="dIngredientsWrap">
@@ -475,6 +492,7 @@ function subscribeToRecipes(){
     .orderBy("createdAt", "desc")
     .onSnapshot(snap => {
       recipesCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      updateCategoryOptions();
       renderGrid();
     }, err => {
       console.error(err);
@@ -515,13 +533,42 @@ document.getElementById("backFromDetail").addEventListener("click", e => {
 
 /* ---------- List / grid ---------- */
 document.getElementById("searchInput").addEventListener("input", renderGrid);
+document.getElementById("categoryFilter").addEventListener("change", renderGrid);
+
+function updateCategoryOptions(){
+  const categories = Array.from(new Set(
+    recipesCache.map(r => (r.category || "").trim()).filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b, "sv"));
+
+  const filterSelect = document.getElementById("categoryFilter");
+  const previousValue = filterSelect.value;
+  filterSelect.innerHTML = '<option value="">Alla kategorier</option>';
+  categories.forEach(cat => {
+    const opt = document.createElement("option");
+    opt.value = cat;
+    opt.textContent = cat;
+    filterSelect.appendChild(opt);
+  });
+  if(categories.includes(previousValue)) filterSelect.value = previousValue;
+
+  const datalist = document.getElementById("categoryOptions");
+  datalist.innerHTML = "";
+  categories.forEach(cat => {
+    const opt = document.createElement("option");
+    opt.value = cat;
+    datalist.appendChild(opt);
+  });
+}
 
 function renderGrid(){
   const q = document.getElementById("searchInput").value.trim().toLowerCase();
+  const cat = document.getElementById("categoryFilter").value;
   const grid = document.getElementById("recipeGrid");
-  const filtered = recipesCache.filter(r =>
-    !q || (r.title || "").toLowerCase().includes(q)
-  );
+  const filtered = recipesCache.filter(r => {
+    const matchesQuery = !q || (r.title || "").toLowerCase().includes(q);
+    const matchesCategory = !cat || (r.category || "") === cat;
+    return matchesQuery && matchesCategory;
+  });
   grid.innerHTML = "";
   document.getElementById("emptyState").hidden = recipesCache.length > 0;
 
@@ -547,6 +594,12 @@ function renderGrid(){
     label.className = "label";
     label.textContent = r.title || "Namnlöst recept";
     card.appendChild(label);
+    if(r.category){
+      const catLabel = document.createElement("div");
+      catLabel.className = "category";
+      catLabel.textContent = r.category;
+      card.appendChild(catLabel);
+    }
     grid.appendChild(card);
   });
 }
@@ -561,6 +614,7 @@ function openDetail(id){
   if(r.image){ img.src = r.image; img.hidden = false; } else { img.hidden = true; }
 
   document.getElementById("dTitle").textContent = r.title || "Namnlöst recept";
+  document.getElementById("dCategory").textContent = r.category || "";
 
   const srcEl = document.getElementById("dSource");
   if(r.sourceUrl){
@@ -613,6 +667,7 @@ function resetAddView(){
   document.getElementById("pickerImages").innerHTML = "";
   document.getElementById("pickerBlocks").innerHTML = "";
   document.getElementById("fTitle").value = "";
+  document.getElementById("fCategory").value = "";
   document.getElementById("fImageUrl").value = "";
   document.getElementById("fImageFile").value = "";
   document.getElementById("fImagePreview").hidden = true;
@@ -725,7 +780,10 @@ function findRecipeInJsonLd(doc, baseUrl){
           ? recipe.recipeIngredient.map(s => s.trim())
           : [],
         instructions: flattenInstructions(recipe.recipeInstructions),
-        description: (recipe.description || "").trim()
+        description: (recipe.description || "").trim(),
+        category: Array.isArray(recipe.recipeCategory)
+          ? (recipe.recipeCategory[0] || "").trim()
+          : (recipe.recipeCategory || "").trim()
       };
     }
   }
@@ -780,6 +838,7 @@ document.getElementById("fetchBtn").addEventListener("click", async () => {
 
     if(recipe && (recipe.title || recipe.ingredients.length || recipe.instructions)){
       document.getElementById("fTitle").value = recipe.title || (doc.querySelector("title")?.textContent.trim() || "");
+      document.getElementById("fCategory").value = recipe.category || "";
       document.getElementById("fIngredients").value = recipe.ingredients.join("\n");
       document.getElementById("fInstructions").value = recipe.instructions || recipe.description || "";
 
@@ -934,6 +993,7 @@ document.getElementById("recipeForm").addEventListener("submit", async (e) => {
   statusEl.textContent = "Sparar…";
 
   const title = document.getElementById("fTitle").value.trim();
+  const category = document.getElementById("fCategory").value.trim();
   const ingredients = document.getElementById("fIngredients").value
     .split("\n").map(s => s.trim()).filter(Boolean);
   const instructions = document.getElementById("fInstructions").value.trim();
@@ -944,6 +1004,7 @@ document.getElementById("recipeForm").addEventListener("submit", async (e) => {
   try{
     await saveRecipe({
       title,
+      category,
       image,
       ingredients,
       instructions,
