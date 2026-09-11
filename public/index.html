@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Receptlådan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&display=swap" rel="stylesheet">
+
+<!-- Firebase (compat build, for single-file simplicity) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --paper: #FAF7F0;
+    --paper-raised: #FFFFFF;
+    --ink: #33445E;
+    --ink-soft: #5C6C87;
+    --line: #DFD9C9;
+    --copper: #BF6034;
+    --copper-dark: #9E4E29;
+    --danger: #A34031;
+  }
+
+  *{ box-sizing: border-box; }
+
+  html,body{
+    margin:0; padding:0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Source Serif 4", Georgia, serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,h2,h3{ font-weight: 600; margin: 0; }
+
+  button{
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    background: none;
+  }
+
+  input, textarea{
+    font-family: inherit;
+    font-size: 1rem;
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 0.55rem 0.7rem;
+    color: var(--ink);
+  }
+  input:focus, textarea:focus, button:focus-visible{
+    outline: 2px solid var(--copper);
+    outline-offset: 1px;
+  }
+
+  .app{
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 0 1.1rem 4rem;
+    min-height: 100vh;
+  }
+
+  header.top{
+    padding: 1.6rem 0 1rem;
+    border-bottom: 1px solid var(--line);
+    display:flex; align-items:baseline; justify-content:space-between;
+    gap: 1rem; flex-wrap: wrap;
+  }
+  header.top .brand{
+    font-size: 1.6rem;
+    font-style: italic;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+  }
+  header.top .box-code{
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+  }
+  header.top .box-code button{
+    color: var(--copper-dark);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .toolbar{
+    display:flex; gap:0.7rem; align-items:center;
+    margin: 1.3rem 0 1.5rem;
+    flex-wrap: wrap;
+  }
+  .toolbar input[type=search]{
+    flex: 1 1 220px;
+  }
+  .btn-primary{
+    background: var(--copper);
+    color: #fff;
+    padding: 0.6rem 1.1rem;
+    border-radius: 3px;
+    font-size: 0.98rem;
+    white-space: nowrap;
+  }
+  .btn-primary:hover{ background: var(--copper-dark); }
+  .btn-quiet{
+    color: var(--ink-soft);
+    font-size: 0.92rem;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .btn-outline{
+    border: 1px solid var(--line);
+    padding: 0.5rem 0.9rem;
+    border-radius: 3px;
+    color: var(--ink);
+    background: var(--paper-raised);
+  }
+  .btn-outline:hover{ border-color: var(--copper); }
+  .btn-danger{ color: var(--danger); }
+
+  .grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 1rem;
+  }
+  .card{
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+    text-align: left;
+    display:flex; flex-direction:column;
+  }
+  .card:hover{ border-color: var(--copper); }
+  .card .thumb{
+    width:100%; aspect-ratio: 4/3; object-fit: cover;
+    background: var(--paper);
+    display:block;
+  }
+  .card .thumb.placeholder{
+    display:flex; align-items:center; justify-content:center;
+    color: var(--ink-soft); font-size: 0.85rem; font-style: italic;
+  }
+  .card .label{
+    padding: 0.6rem 0.7rem 0.8rem;
+    font-size: 0.98rem;
+    line-height: 1.3;
+  }
+
+  .empty-state{
+    margin-top: 3rem;
+    text-align:center;
+    color: var(--ink-soft);
+  }
+  .empty-state p{ margin: 0.4rem 0; }
+
+  /* Add-recipe flow */
+  .panel{
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 1.2rem 1.2rem 1.4rem;
+    margin-bottom: 1.2rem;
+  }
+  .panel h2{ font-size: 1.15rem; margin-bottom: 0.7rem; }
+  .field-row{ display:flex; gap:0.6rem; }
+  .field-row input{ flex:1; }
+  .hint{ color: var(--ink-soft); font-size: 0.86rem; margin-top: 0.5rem; }
+  .status-line{ font-size: 0.9rem; margin-top: 0.6rem; }
+  .status-line.err{ color: var(--danger); }
+  .status-line.ok{ color: var(--ink-soft); }
+
+  form.recipe-form label{
+    display:block;
+    font-size: 0.86rem;
+    color: var(--ink-soft);
+    margin: 1rem 0 0.3rem;
+  }
+  form.recipe-form label:first-of-type{ margin-top: 0.2rem; }
+  form.recipe-form input, form.recipe-form textarea{ width:100%; }
+  form.recipe-form textarea{ min-height: 100px; resize: vertical; line-height:1.45; }
+  .form-actions{ margin-top:1.2rem; display:flex; gap:0.7rem; align-items:center; }
+
+  .image-pick-row{ display:flex; gap:0.8rem; align-items:flex-start; margin-top:0.3rem; }
+  .image-pick-row .preview{
+    width:96px; height:72px; object-fit:cover; border-radius:3px;
+    border:1px solid var(--line); background: var(--paper);
+    flex-shrink:0;
+  }
+  .image-pick-row .controls{ flex:1; display:flex; flex-direction:column; gap:0.4rem; }
+
+  /* Picker (fallback manual pointing) */
+  .picker{
+    margin-top: 1rem;
+    border-top: 1px dashed var(--line);
+    padding-top: 1rem;
+  }
+  .picker h3{ font-size: 1rem; margin-bottom: 0.3rem; }
+  .picker p.hint{ margin-top:0; }
+  .picker-images{
+    display:flex; gap:0.6rem; flex-wrap:wrap; margin: 0.6rem 0 1rem;
+  }
+  .picker-images img{
+    width:84px; height:64px; object-fit:cover; border-radius:3px;
+    border: 2px solid transparent; cursor:pointer;
+  }
+  .picker-images img:hover{ border-color: var(--copper); }
+  .picker-images img.chosen{ border-color: var(--copper-dark); }
+
+  .picker-block{
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 0.6rem 0.7rem;
+    margin-bottom: 0.6rem;
+    background: var(--paper);
+  }
+  .picker-block .snippet{
+    font-size: 0.92rem;
+    line-height: 1.45;
+    max-height: 4.4em;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+    color: var(--ink);
+  }
+  .picker-block .assign-btns{ display:flex; gap:0.5rem; flex-wrap:wrap; }
+  .picker-block .assign-btns button{
+    font-size: 0.8rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 0.25rem 0.7rem;
+    color: var(--ink-soft);
+    background: var(--paper-raised);
+  }
+  .picker-block .assign-btns button:hover{ border-color: var(--copper); color: var(--copper-dark); }
+  .picker-block .assign-btns button.active{
+    background: var(--copper); border-color: var(--copper); color: #fff;
+  }
+
+  /* Detail view */
+  .detail-image{
+    width:100%; max-height: 340px; object-fit:cover;
+    border-radius: 5px; margin-bottom: 1.2rem;
+    background: var(--paper-raised); border: 1px solid var(--line);
+  }
+  .detail-title{ font-size: 1.7rem; font-style: italic; margin-bottom: 0.3rem; }
+  .detail-source{ font-size: 0.85rem; color: var(--ink-soft); margin-bottom: 1.4rem; }
+  .detail-source a{ color: var(--ink-soft); }
+  .detail-section{ margin-bottom: 1.6rem; }
+  .detail-section h3{
+    font-size: 0.85rem; text-transform: none; letter-spacing: 0.2px;
+    color: var(--copper-dark); margin-bottom: 0.5rem;
+    border-bottom: 1px solid var(--line); padding-bottom: 0.3rem;
+  }
+  .detail-section ul{ margin:0; padding-left: 1.2rem; line-height: 1.75; }
+  .detail-section .instructions{ line-height: 1.75; white-space: pre-wrap; }
+  .detail-actions{ display:flex; gap:1rem; margin-top: 2rem; }
+
+  .back-link{
+    display:inline-block; margin-bottom: 1.1rem;
+    color: var(--ink-soft); font-size: 0.9rem;
+  }
+  .back-link:hover{ color: var(--copper-dark); }
+
+  .loader{
+    display:inline-block; width:14px; height:14px;
+    border: 2px solid var(--line); border-top-color: var(--copper);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: -2px; margin-right: 0.4rem;
+  }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
+
+  [hidden]{ display:none !important; }
+
+  @media (max-width: 480px){
+    header.top{ flex-direction: column; align-items:flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <header class="top">
+    <div class="brand">Receptlådan</div>
+    <div class="box-code">
+      Kod: <strong id="boxCodeLabel">…</strong>
+      · <button id="changeCodeBtn" type="button">byt/dela kod</button>
+    </div>
+  </header>
+
+  <!-- LIST VIEW -->
+  <section id="view-list">
+    <div class="toolbar">
+      <input type="search" id="searchInput" placeholder="Sök bland dina recept…">
+      <button class="btn-primary" id="newRecipeBtn" type="button" disabled>Ansluter…</button>
+    </div>
+    <div class="grid" id="recipeGrid"></div>
+    <div class="empty-state" id="emptyState" hidden>
+      <p>Inga recept sparade än.</p>
+      <p>Klicka på <em>+ Nytt recept</em> för att lägga till det första.</p>
+    </div>
+  </section>
+
+  <!-- ADD VIEW -->
+  <section id="view-add" hidden>
+    <a href="#" class="back-link" id="backFromAdd">← Tillbaka</a>
+
+    <div class="panel" id="fetchPanel">
+      <h2>Hämta från en länk</h2>
+      <div class="field-row">
+        <input type="url" id="urlInput" placeholder="https://exempel.se/recept/...">
+        <button class="btn-outline" id="fetchBtn" type="button">Hämta</button>
+      </div>
+      <div class="status-line" id="fetchStatus"></div>
+      <p class="hint">Fungerar bäst på sidor som taggat sitt recept med strukturerad data. Går det inte automatiskt får du peka ut det du vill spara nedan, eller fylla i för hand.</p>
+      <button class="btn-quiet" id="skipFetchBtn" type="button" style="margin-top:0.6rem;">Hoppa över länken, fyll i för hand</button>
+    </div>
+
+    <div class="panel picker" id="pickerPanel" hidden>
+      <h3>Bild</h3>
+      <p class="hint">Klicka på en bild för att använda den.</p>
+      <div class="picker-images" id="pickerImages"></div>
+
+      <h3>Textblock</h3>
+      <p class="hint">Klicka en knapp under varje block för att säga vad det är.</p>
+      <div id="pickerBlocks"></div>
+    </div>
+
+    <div class="panel">
+      <h2 id="formHeading">Recept</h2>
+      <form class="recipe-form" id="recipeForm">
+        <label for="fTitle">Titel</label>
+        <input type="text" id="fTitle" required>
+
+        <label>Bild</label>
+        <div class="image-pick-row">
+          <img class="preview" id="fImagePreview" alt="" hidden>
+          <div class="controls">
+            <input type="url" id="fImageUrl" placeholder="Bild-URL (valfritt)">
+            <input type="file" id="fImageFile" accept="image/*">
+          </div>
+        </div>
+
+        <label for="fIngredients">Ingredienser (en per rad)</label>
+        <textarea id="fIngredients" placeholder="4 dl mjöl&#10;2 ägg&#10;..."></textarea>
+
+        <label for="fInstructions">Beskrivning / gör så här</label>
+        <textarea id="fInstructions" placeholder="1. Blanda...&#10;2. Grädda..."></textarea>
+
+        <div class="form-actions">
+          <button class="btn-primary" type="submit" id="saveBtn">Spara recept</button>
+          <span class="status-line" id="saveStatus"></span>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- DETAIL VIEW -->
+  <section id="view-detail" hidden>
+    <a href="#" class="back-link" id="backFromDetail">← Alla recept</a>
+    <img class="detail-image" id="dImage" alt="" hidden>
+    <h1 class="detail-title" id="dTitle"></h1>
+    <div class="detail-source" id="dSource"></div>
+
+    <div class="detail-section" id="dIngredientsWrap">
+      <h3>Ingredienser</h3>
+      <ul id="dIngredients"></ul>
+    </div>
+    <div class="detail-section" id="dInstructionsWrap">
+      <h3>Gör så här</h3>
+      <div class="instructions" id="dInstructions"></div>
+    </div>
+
+    <div class="detail-actions">
+      <button class="btn-outline btn-danger" id="deleteBtn" type="button">Ta bort recept</button>
+    </div>
+  </section>
+
+</div>
+
+<script>
+/* =========================================================
+   FIREBASE SETUP
+   Skapa ett Firebase-projekt (firebase.google.com), aktivera
+   Firestore och "Anonym" inloggning under Authentication,
+   och klistra in din config nedan.
+   ========================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyDIUjhs_4E9Ddw_77sj1bwleHartaLKCBY",
+  authDomain: "myrecepies-410f0.firebaseapp.com",
+  projectId: "myrecepies-410f0",
+  storageBucket: "myrecepies-410f0.firebasestorage.app",
+  messagingSenderId: "967438531951",
+  appId: "1:967438531951:web:5fbd7321ed1da48c43fc9a",
+  measurementId: "G-PX7JCKMVRP"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+let currentUser = null;
+let boxCode = null;
+let unsubscribeRecipes = null;
+let recipesCache = [];
+let currentDetailId = null;
+
+/* ---------- Box code (delad "kod" mellan enheter) ---------- */
+function randomCode(){
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for(let i=0;i<6;i++) out += alphabet[Math.floor(Math.random()*alphabet.length)];
+  return out;
+}
+
+function loadBoxCode(){
+  let code = localStorage.getItem("receptladan_code");
+  if(!code){
+    code = randomCode();
+    localStorage.setItem("receptladan_code", code);
+  }
+  return code;
+}
+
+function setBoxCode(code){
+  boxCode = code.toUpperCase().trim();
+  localStorage.setItem("receptladan_code", boxCode);
+  document.getElementById("boxCodeLabel").textContent = boxCode;
+  subscribeToRecipes();
+}
+
+document.getElementById("changeCodeBtn").addEventListener("click", () => {
+  const entered = prompt(
+    "Din kod (dela den för att se samma recept på en annan enhet):",
+    boxCode
+  );
+  if(entered && entered.trim()){
+    setBoxCode(entered);
+  }
+});
+
+/* ---------- Auth ---------- */
+auth.onAuthStateChanged(user => {
+  if(user){
+    currentUser = user;
+    boxCode = loadBoxCode();
+    document.getElementById("boxCodeLabel").textContent = boxCode;
+    subscribeToRecipes();
+    const newBtn = document.getElementById("newRecipeBtn");
+    newBtn.disabled = false;
+    newBtn.textContent = "+ Nytt recept";
+  }
+});
+auth.signInAnonymously().catch(err => {
+  console.error("Inloggning misslyckades", err);
+  document.getElementById("boxCodeLabel").textContent = "ej ansluten";
+  document.getElementById("emptyState").hidden = false;
+  document.getElementById("emptyState").innerHTML =
+    "<p>Kunde inte logga in mot Firebase.</p>" +
+    "<p>Kontrollera att Anonym inloggning är aktiverad under Authentication → Sign-in method, och att firebaseConfig i koden stämmer.</p>" +
+    "<p style=\"font-size:0.85rem\">Felmeddelande: " + (err && err.message ? err.message : err) + "</p>";
+});
+
+/* ---------- Firestore ---------- */
+function recipesCollection(){
+  return db.collection("recipeBoxes").doc(boxCode).collection("recipes");
+}
+
+function subscribeToRecipes(){
+  if(unsubscribeRecipes) unsubscribeRecipes();
+  unsubscribeRecipes = recipesCollection()
+    .orderBy("createdAt", "desc")
+    .onSnapshot(snap => {
+      recipesCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderGrid();
+    }, err => {
+      console.error(err);
+    });
+}
+
+async function saveRecipe(recipe){
+  if(!boxCode){
+    throw new Error("Inte ansluten till databasen än – vänta en stund och försök igen.");
+  }
+  await recipesCollection().add({
+    ...recipe,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+async function deleteRecipe(id){
+  await recipesCollection().doc(id).delete();
+}
+
+/* ---------- View switching ---------- */
+function showView(name){
+  document.getElementById("view-list").hidden = name !== "list";
+  document.getElementById("view-add").hidden = name !== "add";
+  document.getElementById("view-detail").hidden = name !== "detail";
+}
+
+document.getElementById("newRecipeBtn").addEventListener("click", () => {
+  resetAddView();
+  showView("add");
+});
+document.getElementById("backFromAdd").addEventListener("click", e => {
+  e.preventDefault(); showView("list");
+});
+document.getElementById("backFromDetail").addEventListener("click", e => {
+  e.preventDefault(); showView("list");
+});
+
+/* ---------- List / grid ---------- */
+document.getElementById("searchInput").addEventListener("input", renderGrid);
+
+function renderGrid(){
+  const q = document.getElementById("searchInput").value.trim().toLowerCase();
+  const grid = document.getElementById("recipeGrid");
+  const filtered = recipesCache.filter(r =>
+    !q || (r.title || "").toLowerCase().includes(q)
+  );
+  grid.innerHTML = "";
+  document.getElementById("emptyState").hidden = recipesCache.length > 0;
+
+  filtered.forEach(r => {
+    const card = document.createElement("button");
+    card.className = "card";
+    card.type = "button";
+    card.addEventListener("click", () => openDetail(r.id));
+
+    if(r.image){
+      const img = document.createElement("img");
+      img.className = "thumb";
+      img.src = r.image;
+      img.alt = "";
+      card.appendChild(img);
+    } else {
+      const ph = document.createElement("div");
+      ph.className = "thumb placeholder";
+      ph.textContent = "Ingen bild";
+      card.appendChild(ph);
+    }
+    const label = document.createElement("div");
+    label.className = "label";
+    label.textContent = r.title || "Namnlöst recept";
+    card.appendChild(label);
+    grid.appendChild(card);
+  });
+}
+
+/* ---------- Detail view ---------- */
+function openDetail(id){
+  const r = recipesCache.find(x => x.id === id);
+  if(!r) return;
+  currentDetailId = id;
+
+  const img = document.getElementById("dImage");
+  if(r.image){ img.src = r.image; img.hidden = false; } else { img.hidden = true; }
+
+  document.getElementById("dTitle").textContent = r.title || "Namnlöst recept";
+
+  const srcEl = document.getElementById("dSource");
+  if(r.sourceUrl){
+    srcEl.innerHTML = "Ursprung: <a href=\"" + r.sourceUrl + "\" target=\"_blank\" rel=\"noopener\">" + r.sourceUrl + "</a>";
+  } else {
+    srcEl.textContent = "";
+  }
+
+  const ingWrap = document.getElementById("dIngredientsWrap");
+  const ingEl = document.getElementById("dIngredients");
+  ingEl.innerHTML = "";
+  const ingredients = Array.isArray(r.ingredients) ? r.ingredients : [];
+  if(ingredients.length){
+    ingredients.forEach(line => {
+      const li = document.createElement("li");
+      li.textContent = line;
+      ingEl.appendChild(li);
+    });
+    ingWrap.hidden = false;
+  } else {
+    ingWrap.hidden = true;
+  }
+
+  const instrWrap = document.getElementById("dInstructionsWrap");
+  const instrEl = document.getElementById("dInstructions");
+  if(r.instructions && r.instructions.trim()){
+    instrEl.textContent = r.instructions;
+    instrWrap.hidden = false;
+  } else {
+    instrWrap.hidden = true;
+  }
+
+  showView("detail");
+}
+
+document.getElementById("deleteBtn").addEventListener("click", async () => {
+  if(!currentDetailId) return;
+  if(confirm("Ta bort det här receptet?")){
+    await deleteRecipe(currentDetailId);
+    showView("list");
+  }
+});
+
+/* ---------- Add view: reset ---------- */
+function resetAddView(){
+  document.getElementById("urlInput").value = "";
+  document.getElementById("fetchStatus").textContent = "";
+  document.getElementById("fetchStatus").className = "status-line";
+  document.getElementById("pickerPanel").hidden = true;
+  document.getElementById("pickerImages").innerHTML = "";
+  document.getElementById("pickerBlocks").innerHTML = "";
+  document.getElementById("fTitle").value = "";
+  document.getElementById("fImageUrl").value = "";
+  document.getElementById("fImageFile").value = "";
+  document.getElementById("fImagePreview").hidden = true;
+  document.getElementById("fIngredients").value = "";
+  document.getElementById("fInstructions").value = "";
+  document.getElementById("saveStatus").textContent = "";
+  fetchedSourceUrl = "";
+  chosenImageDataUrl = "";
+}
+
+let fetchedSourceUrl = "";
+let chosenImageDataUrl = "";
+
+document.getElementById("skipFetchBtn").addEventListener("click", () => {
+  document.getElementById("fetchPanel").querySelector("h2").textContent = "Hämta från en länk (valfritt)";
+  document.getElementById("fTitle").focus();
+});
+
+/* ---------- Fetching + parsing ---------- */
+function proxyUrls(url){
+  const enc = encodeURIComponent(url);
+  return [
+    "/proxy?url=" + enc,                                   // egen Cloudflare Pages Function, om deployad
+    "https://api.allorigins.win/raw?url=" + enc,
+    "https://api.codetabs.com/v1/proxy?quest=" + enc,
+    "https://corsproxy.io/?url=" + enc
+  ];
+}
+
+async function fetchTextViaProxy(url){
+  let lastErr;
+  for(const proxied of proxyUrls(url)){
+    try{
+      const res = await fetch(proxied);
+      if(!res.ok){ lastErr = new Error("HTTP " + res.status); continue; }
+      const text = await res.text();
+      if(text && text.length > 200) return text;
+      lastErr = new Error("Tomt svar");
+    }catch(e){
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("Alla proxyer misslyckades");
+}
+
+async function fetchBlobViaProxy(url){
+  let lastErr;
+  for(const proxied of proxyUrls(url)){
+    try{
+      const res = await fetch(proxied);
+      if(!res.ok){ lastErr = new Error("HTTP " + res.status); continue; }
+      return await res.blob();
+    }catch(e){
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("Alla proxyer misslyckades");
+}
+
+function absoluteUrl(maybeRelative, base){
+  try{ return new URL(maybeRelative, base).href; }
+  catch(e){ return maybeRelative; }
+}
+
+function flattenInstructions(instr){
+  if(!instr) return "";
+  if(typeof instr === "string") return instr.trim();
+  if(Array.isArray(instr)){
+    return instr.map(flattenInstructions).filter(Boolean).join("\n");
+  }
+  if(typeof instr === "object"){
+    if(instr.itemListElement) return flattenInstructions(instr.itemListElement);
+    if(instr.text) return instr.text.trim();
+    if(instr.name) return instr.name.trim();
+  }
+  return "";
+}
+
+function firstImageUrl(image, base){
+  if(!image) return "";
+  if(typeof image === "string") return absoluteUrl(image, base);
+  if(Array.isArray(image)) return firstImageUrl(image[0], base);
+  if(typeof image === "object" && image.url) return absoluteUrl(image.url, base);
+  return "";
+}
+
+function findRecipeInJsonLd(doc, baseUrl){
+  const scripts = Array.from(doc.querySelectorAll('script[type="application/ld+json"]'));
+  for(const script of scripts){
+    let data;
+    try{ data = JSON.parse(script.textContent); } catch(e){ continue; }
+    const candidates = [];
+    const collect = node => {
+      if(!node || typeof node !== "object") return;
+      if(Array.isArray(node)){ node.forEach(collect); return; }
+      if(node["@graph"]) collect(node["@graph"]);
+      candidates.push(node);
+    };
+    collect(data);
+    const recipe = candidates.find(n => {
+      const t = n["@type"];
+      if(!t) return false;
+      return Array.isArray(t) ? t.includes("Recipe") : t === "Recipe";
+    });
+    if(recipe){
+      return {
+        title: (recipe.name || "").trim(),
+        image: firstImageUrl(recipe.image, baseUrl),
+        ingredients: Array.isArray(recipe.recipeIngredient)
+          ? recipe.recipeIngredient.map(s => s.trim())
+          : [],
+        instructions: flattenInstructions(recipe.recipeInstructions),
+        description: (recipe.description || "").trim()
+      };
+    }
+  }
+  return null;
+}
+
+async function toResizedDataUrl(blob, maxWidth){
+  const arrayBufToDataUrl = () => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+  const rawDataUrl = await arrayBufToDataUrl();
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxWidth / img.width);
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+      try{
+        resolve(canvas.toDataURL("image/jpeg", 0.78));
+      }catch(e){
+        resolve(rawDataUrl);
+      }
+    };
+    img.onerror = () => resolve(rawDataUrl);
+    img.src = rawDataUrl;
+  });
+}
+
+document.getElementById("fetchBtn").addEventListener("click", async () => {
+  const url = document.getElementById("urlInput").value.trim();
+  const statusEl = document.getElementById("fetchStatus");
+  if(!url){ statusEl.textContent = "Ange en länk först."; statusEl.className = "status-line err"; return; }
+
+  statusEl.className = "status-line ok";
+  statusEl.innerHTML = "<span class=\"loader\"></span>Hämtar sidan…";
+  document.getElementById("pickerPanel").hidden = true;
+
+  try{
+    const html = await fetchTextViaProxy(url);
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    fetchedSourceUrl = url;
+
+    const recipe = findRecipeInJsonLd(doc, url);
+
+    if(recipe && (recipe.title || recipe.ingredients.length || recipe.instructions)){
+      document.getElementById("fTitle").value = recipe.title || (doc.querySelector("title")?.textContent.trim() || "");
+      document.getElementById("fIngredients").value = recipe.ingredients.join("\n");
+      document.getElementById("fInstructions").value = recipe.instructions || recipe.description || "";
+
+      if(recipe.image){
+        statusEl.innerHTML = "<span class=\"loader\"></span>Hittade recept, hämtar bild…";
+        try{
+          const blob = await fetchBlobViaProxy(recipe.image);
+          chosenImageDataUrl = await toResizedDataUrl(blob, 900);
+          showImagePreview(chosenImageDataUrl);
+        }catch(e){
+          document.getElementById("fImageUrl").value = recipe.image;
+        }
+      }
+      statusEl.textContent = "Recept hittat automatiskt. Kolla igenom och redigera vid behov innan du sparar.";
+      statusEl.className = "status-line ok";
+    } else {
+      statusEl.textContent = "Hittade ingen strukturerad receptdata. Peka ut det du vill spara nedan.";
+      statusEl.className = "status-line ok";
+      buildPicker(doc, url);
+    }
+  }catch(err){
+    console.error(err);
+    statusEl.textContent = "Kunde inte hämta sidan automatiskt (" + err.message + "). Fyll i för hand nedan, eller klistra in text direkt.";
+    statusEl.className = "status-line err";
+  }
+});
+
+/* ---------- Picker (manual pointing) ---------- */
+function buildPicker(doc, baseUrl){
+  const panel = document.getElementById("pickerPanel");
+  const imagesWrap = document.getElementById("pickerImages");
+  const blocksWrap = document.getElementById("pickerBlocks");
+  imagesWrap.innerHTML = "";
+  blocksWrap.innerHTML = "";
+
+  // Images
+  const imgs = Array.from(doc.querySelectorAll("img"))
+    .map(img => absoluteUrl(img.getAttribute("src") || "", baseUrl))
+    .filter(src => src && src.startsWith("http"));
+  const uniqueImgs = Array.from(new Set(imgs)).slice(0, 24);
+
+  uniqueImgs.forEach(src => {
+    const thumb = document.createElement("img");
+    thumb.src = src;
+    thumb.loading = "lazy";
+    thumb.addEventListener("click", async () => {
+      Array.from(imagesWrap.children).forEach(el => el.classList.remove("chosen"));
+      thumb.classList.add("chosen");
+      try{
+        const blob = await fetchBlobViaProxy(src);
+        chosenImageDataUrl = await toResizedDataUrl(blob, 900);
+      }catch(e){
+        chosenImageDataUrl = "";
+        document.getElementById("fImageUrl").value = src;
+      }
+      showImagePreview(chosenImageDataUrl || src);
+    });
+    imagesWrap.appendChild(thumb);
+  });
+
+  // Text blocks: lists (ingredient candidates) and paragraphs/headings (description candidates)
+  const blocks = [];
+  doc.querySelectorAll("ul, ol").forEach(list => {
+    const items = Array.from(list.querySelectorAll("li"))
+      .map(li => li.textContent.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    if(items.length >= 2){
+      blocks.push({ kind: "list", text: items.join("\n"), snippet: items.slice(0,4).join(" · ") });
+    }
+  });
+  doc.querySelectorAll("h1, h2").forEach(h => {
+    const text = h.textContent.replace(/\s+/g, " ").trim();
+    if(text.length > 2 && text.length < 140){
+      blocks.push({ kind: "heading", text, snippet: text });
+    }
+  });
+  doc.querySelectorAll("p").forEach(p => {
+    const text = p.textContent.replace(/\s+/g, " ").trim();
+    if(text.length > 40){
+      blocks.push({ kind: "paragraph", text, snippet: text });
+    }
+  });
+
+  blocks.slice(0, 40).forEach(block => {
+    const el = document.createElement("div");
+    el.className = "picker-block";
+    const snippet = document.createElement("div");
+    snippet.className = "snippet";
+    snippet.textContent = block.snippet;
+    el.appendChild(snippet);
+
+    const btnRow = document.createElement("div");
+    btnRow.className = "assign-btns";
+
+    const makeBtn = (label, onClick) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = label;
+      b.addEventListener("click", () => {
+        onClick();
+        Array.from(btnRow.children).forEach(x => x.classList.remove("active"));
+        b.classList.add("active");
+      });
+      return b;
+    };
+
+    btnRow.appendChild(makeBtn("Detta är titeln", () => {
+      document.getElementById("fTitle").value = block.text.split("\n")[0];
+    }));
+    btnRow.appendChild(makeBtn("Dessa är ingredienserna", () => {
+      const field = document.getElementById("fIngredients");
+      field.value = field.value ? field.value + "\n" + block.text : block.text;
+    }));
+    btnRow.appendChild(makeBtn("Detta är beskrivningen", () => {
+      const field = document.getElementById("fInstructions");
+      field.value = field.value ? field.value + "\n\n" + block.text : block.text;
+    }));
+
+    el.appendChild(btnRow);
+    blocksWrap.appendChild(el);
+  });
+
+  panel.hidden = false;
+}
+
+/* ---------- Manual image controls ---------- */
+function showImagePreview(src){
+  const preview = document.getElementById("fImagePreview");
+  if(src){ preview.src = src; preview.hidden = false; }
+  else { preview.hidden = true; }
+}
+
+document.getElementById("fImageUrl").addEventListener("input", (e) => {
+  chosenImageDataUrl = "";
+  showImagePreview(e.target.value.trim());
+});
+
+document.getElementById("fImageFile").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  chosenImageDataUrl = await toResizedDataUrl(file, 900);
+  document.getElementById("fImageUrl").value = "";
+  showImagePreview(chosenImageDataUrl);
+});
+
+/* ---------- Save ---------- */
+document.getElementById("recipeForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const statusEl = document.getElementById("saveStatus");
+  const saveBtn = document.getElementById("saveBtn");
+  saveBtn.disabled = true;
+  statusEl.textContent = "Sparar…";
+
+  const title = document.getElementById("fTitle").value.trim();
+  const ingredients = document.getElementById("fIngredients").value
+    .split("\n").map(s => s.trim()).filter(Boolean);
+  const instructions = document.getElementById("fInstructions").value.trim();
+  const imageUrl = document.getElementById("fImageUrl").value.trim();
+
+  const image = chosenImageDataUrl || imageUrl || "";
+
+  try{
+    await saveRecipe({
+      title,
+      image,
+      ingredients,
+      instructions,
+      sourceUrl: fetchedSourceUrl || ""
+    });
+    showView("list");
+  }catch(err){
+    console.error(err);
+    statusEl.textContent = "Kunde inte spara: " + err.message;
+  }finally{
+    saveBtn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
