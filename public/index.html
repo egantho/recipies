@@ -347,9 +347,12 @@
         <label for="fTitle">Titel</label>
         <input type="text" id="fTitle" required>
 
-        <label for="fCategory">Kategori</label>
-        <input type="text" id="fCategory" list="categoryOptions" placeholder="t.ex. Huvudrätt, Bakning, Efterrätt…">
-        <datalist id="categoryOptions"></datalist>
+        <label for="fCategorySelect">Kategori</label>
+        <select id="fCategorySelect">
+          <option value="">Ingen kategori</option>
+          <option value="__new__">+ Ny kategori…</option>
+        </select>
+        <input type="text" id="fCategoryNew" placeholder="Namn på ny kategori" style="margin-top:0.5rem;" hidden>
 
         <label>Bild</label>
         <div class="image-pick-row">
@@ -392,6 +395,7 @@
     </div>
 
     <div class="detail-actions">
+      <button class="btn-outline" id="editBtn" type="button">Redigera recept</button>
       <button class="btn-outline btn-danger" id="deleteBtn" type="button">Ta bort recept</button>
     </div>
   </section>
@@ -406,13 +410,12 @@
    och klistra in din config nedan.
    ========================================================= */
 const firebaseConfig = {
-  apiKey: "AIzaSyDIUjhs_4E9Ddw_77sj1bwleHartaLKCBY",
-  authDomain: "myrecepies-410f0.firebaseapp.com",
-  projectId: "myrecepies-410f0",
-  storageBucket: "myrecepies-410f0.firebasestorage.app",
-  messagingSenderId: "967438531951",
-  appId: "1:967438531951:web:5fbd7321ed1da48c43fc9a",
-  measurementId: "G-PX7JCKMVRP"
+  apiKey: "DIN_API_KEY",
+  authDomain: "DITT_PROJEKT.firebaseapp.com",
+  projectId: "DITT_PROJEKT",
+  storageBucket: "DITT_PROJEKT.appspot.com",
+  messagingSenderId: "…",
+  appId: "…"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -509,6 +512,16 @@ async function saveRecipe(recipe){
   });
 }
 
+async function updateRecipe(id, recipe){
+  if(!boxCode){
+    throw new Error("Inte ansluten till databasen än – vänta en stund och försök igen.");
+  }
+  await recipesCollection().doc(id).update({
+    ...recipe,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
 async function deleteRecipe(id){
   await recipesCollection().doc(id).delete();
 }
@@ -523,6 +536,10 @@ function showView(name){
 document.getElementById("newRecipeBtn").addEventListener("click", () => {
   resetAddView();
   showView("add");
+});
+document.getElementById("editBtn").addEventListener("click", () => {
+  if(!currentDetailId) return;
+  openEditor(currentDetailId);
 });
 document.getElementById("backFromAdd").addEventListener("click", e => {
   e.preventDefault(); showView("list");
@@ -551,14 +568,57 @@ function updateCategoryOptions(){
   });
   if(categories.includes(previousValue)) filterSelect.value = previousValue;
 
-  const datalist = document.getElementById("categoryOptions");
-  datalist.innerHTML = "";
+  const formSelect = document.getElementById("fCategorySelect");
+  const previousFormValue = formSelect.value;
+  formSelect.innerHTML = '<option value="">Ingen kategori</option>';
   categories.forEach(cat => {
     const opt = document.createElement("option");
     opt.value = cat;
-    datalist.appendChild(opt);
+    opt.textContent = cat;
+    formSelect.appendChild(opt);
   });
+  const newOpt = document.createElement("option");
+  newOpt.value = "__new__";
+  newOpt.textContent = "+ Ny kategori…";
+  formSelect.appendChild(newOpt);
+  if(categories.includes(previousFormValue) || previousFormValue === "" || previousFormValue === "__new__"){
+    formSelect.value = previousFormValue;
+  }
 }
+
+function setCategoryFieldValue(cat){
+  const formSelect = document.getElementById("fCategorySelect");
+  const newInput = document.getElementById("fCategoryNew");
+  cat = (cat || "").trim();
+  if(!cat){
+    formSelect.value = "";
+    newInput.hidden = true;
+    newInput.value = "";
+    return;
+  }
+  const optionExists = Array.from(formSelect.options).some(o => o.value === cat);
+  if(optionExists){
+    formSelect.value = cat;
+    newInput.hidden = true;
+    newInput.value = "";
+  } else {
+    formSelect.value = "__new__";
+    newInput.hidden = false;
+    newInput.value = cat;
+  }
+}
+
+document.getElementById("fCategorySelect").addEventListener("change", (e) => {
+  const newInput = document.getElementById("fCategoryNew");
+  if(e.target.value === "__new__"){
+    newInput.hidden = false;
+    newInput.value = "";
+    newInput.focus();
+  } else {
+    newInput.hidden = true;
+    newInput.value = "";
+  }
+});
 
 function renderGrid(){
   const q = document.getElementById("searchInput").value.trim().toLowerCase();
@@ -566,7 +626,7 @@ function renderGrid(){
   const grid = document.getElementById("recipeGrid");
   const filtered = recipesCache.filter(r => {
     const matchesQuery = !q || (r.title || "").toLowerCase().includes(q);
-    const matchesCategory = !cat || (r.category || "") === cat;
+    const matchesCategory = !cat || (r.category || "").toLowerCase().includes(cat.toLowerCase());
     return matchesQuery && matchesCategory;
   });
   grid.innerHTML = "";
@@ -659,7 +719,15 @@ document.getElementById("deleteBtn").addEventListener("click", async () => {
 });
 
 /* ---------- Add view: reset ---------- */
+let editingRecipeId = null;
+let fetchedSourceUrl = "";
+let chosenImageDataUrl = "";
+
 function resetAddView(){
+  editingRecipeId = null;
+  document.getElementById("formHeading").textContent = "Recept";
+  document.getElementById("saveBtn").textContent = "Spara recept";
+  document.getElementById("fetchPanel").hidden = false;
   document.getElementById("urlInput").value = "";
   document.getElementById("fetchStatus").textContent = "";
   document.getElementById("fetchStatus").className = "status-line";
@@ -667,7 +735,7 @@ function resetAddView(){
   document.getElementById("pickerImages").innerHTML = "";
   document.getElementById("pickerBlocks").innerHTML = "";
   document.getElementById("fTitle").value = "";
-  document.getElementById("fCategory").value = "";
+  setCategoryFieldValue("");
   document.getElementById("fImageUrl").value = "";
   document.getElementById("fImageFile").value = "";
   document.getElementById("fImagePreview").hidden = true;
@@ -678,8 +746,34 @@ function resetAddView(){
   chosenImageDataUrl = "";
 }
 
-let fetchedSourceUrl = "";
-let chosenImageDataUrl = "";
+function openEditor(id){
+  const r = recipesCache.find(x => x.id === id);
+  if(!r) return;
+
+  resetAddView();
+  editingRecipeId = id;
+  document.getElementById("formHeading").textContent = "Redigera recept";
+  document.getElementById("saveBtn").textContent = "Spara ändringar";
+  document.getElementById("fetchPanel").hidden = true;
+
+  document.getElementById("fTitle").value = r.title || "";
+  setCategoryFieldValue(r.category || "");
+  document.getElementById("fIngredients").value = Array.isArray(r.ingredients) ? r.ingredients.join("\n") : "";
+  document.getElementById("fInstructions").value = r.instructions || "";
+  fetchedSourceUrl = r.sourceUrl || "";
+
+  if(r.image){
+    if(r.image.startsWith("data:")){
+      chosenImageDataUrl = r.image;
+      showImagePreview(r.image);
+    } else {
+      document.getElementById("fImageUrl").value = r.image;
+      showImagePreview(r.image);
+    }
+  }
+
+  showView("add");
+}
 
 document.getElementById("skipFetchBtn").addEventListener("click", () => {
   document.getElementById("fetchPanel").querySelector("h2").textContent = "Hämta från en länk (valfritt)";
@@ -838,7 +932,7 @@ document.getElementById("fetchBtn").addEventListener("click", async () => {
 
     if(recipe && (recipe.title || recipe.ingredients.length || recipe.instructions)){
       document.getElementById("fTitle").value = recipe.title || (doc.querySelector("title")?.textContent.trim() || "");
-      document.getElementById("fCategory").value = recipe.category || "";
+      setCategoryFieldValue(recipe.category || "");
       document.getElementById("fIngredients").value = recipe.ingredients.join("\n");
       document.getElementById("fInstructions").value = recipe.instructions || recipe.description || "";
 
@@ -993,7 +1087,10 @@ document.getElementById("recipeForm").addEventListener("submit", async (e) => {
   statusEl.textContent = "Sparar…";
 
   const title = document.getElementById("fTitle").value.trim();
-  const category = document.getElementById("fCategory").value.trim();
+  const categorySelectValue = document.getElementById("fCategorySelect").value;
+  const category = categorySelectValue === "__new__"
+    ? document.getElementById("fCategoryNew").value.trim()
+    : categorySelectValue.trim();
   const ingredients = document.getElementById("fIngredients").value
     .split("\n").map(s => s.trim()).filter(Boolean);
   const instructions = document.getElementById("fInstructions").value.trim();
@@ -1002,15 +1099,23 @@ document.getElementById("recipeForm").addEventListener("submit", async (e) => {
   const image = chosenImageDataUrl || imageUrl || "";
 
   try{
-    await saveRecipe({
+    const payload = {
       title,
       category,
       image,
       ingredients,
       instructions,
       sourceUrl: fetchedSourceUrl || ""
-    });
-    showView("list");
+    };
+    if(editingRecipeId){
+      await updateRecipe(editingRecipeId, payload);
+      const savedId = editingRecipeId;
+      showView("detail");
+      openDetail(savedId);
+    } else {
+      await saveRecipe(payload);
+      showView("list");
+    }
   }catch(err){
     console.error(err);
     statusEl.textContent = "Kunde inte spara: " + err.message;
