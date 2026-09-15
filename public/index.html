@@ -307,6 +307,24 @@
     color: var(--copper);
     letter-spacing: 0.05rem;
   }
+  .card.selectable{ position: relative; }
+  .card .select-check{
+    position:absolute; top:0.5rem; left:0.5rem;
+    width:24px; height:24px; border-radius: 50%;
+    background: rgba(255,255,255,0.9); border: 2px solid var(--line);
+    display:flex; align-items:center; justify-content:center;
+    font-size: 0.9rem; color: transparent;
+  }
+  .card.selected .select-check{
+    background: var(--copper); border-color: var(--copper); color:#fff;
+  }
+  .card.selected{ outline: 2px solid var(--copper); }
+
+  .selection-bar{
+    display:flex; align-items:center; gap:0.7rem; flex-wrap:wrap;
+    margin-bottom: 1.2rem;
+  }
+  .selection-bar select, .selection-bar input{ flex: 0 1 200px; }
   .share-panel{ margin-top: 2rem; }
   .share-panel h3{
     font-size: 0.85rem; color: var(--copper-dark); margin-bottom: 0.6rem;
@@ -338,6 +356,13 @@
 
   [hidden]{ display:none !important; }
 
+  @media print{
+    .no-print{ display:none !important; }
+    body, .app{ background: #fff; }
+    .app{ max-width: none; padding: 0; }
+    .detail-image{ max-height: 260px; }
+  }
+
   @media (max-width: 480px){
     header.top{ flex-direction: column; align-items:flex-start; }
   }
@@ -347,7 +372,7 @@
 
 <div class="app">
 
-  <header class="top">
+  <header class="top no-print">
     <div class="brand">Receptlådan</div>
     <div class="account" id="accountBar" hidden>
       <span id="userEmailLabel"></span>
@@ -394,7 +419,19 @@
         <option value="alpha-asc">Bokstavsordning: A-Ö</option>
         <option value="alpha-desc">Bokstavsordning: Ö-A</option>
       </select>
+      <button class="btn-outline" id="viewPlansBtn" type="button">Mina listor</button>
+      <button class="btn-outline" id="selectModeBtn" type="button">Välj recept</button>
       <button class="btn-primary" id="newRecipeBtn" type="button" disabled>Ansluter…</button>
+    </div>
+    <div class="panel selection-bar" id="selectionBar" hidden>
+      <span id="selectionCount"></span>
+      <select id="selectionPlanSelect">
+        <option value="">Välj lista…</option>
+        <option value="__new__">+ Ny lista…</option>
+      </select>
+      <input type="text" id="selectionNewPlanName" placeholder="Namn på ny lista" hidden>
+      <button class="btn-primary" id="addSelectionBtn" type="button">Lägg till i lista</button>
+      <button class="btn-quiet" id="cancelSelectionBtn" type="button">Avbryt</button>
     </div>
     <div id="recipeContainer">
       <div class="grid" id="recipeGrid"></div>
@@ -402,6 +439,34 @@
     <div class="empty-state" id="emptyState" hidden>
       <p>Inga recept sparade än.</p>
       <p>Klicka på <em>+ Nytt recept</em> för att lägga till det första.</p>
+    </div>
+  </section>
+
+  <!-- PLANS LIST VIEW -->
+  <section id="view-plans" hidden>
+    <a href="#" class="back-link" id="backFromPlans">← Alla recept</a>
+    <div class="toolbar">
+      <h1 class="detail-title" style="flex:1; font-size:1.3rem;">Mina listor</h1>
+      <button class="btn-primary" id="newPlanBtn" type="button">+ Ny lista</button>
+    </div>
+    <div id="plansContainer"></div>
+    <div class="empty-state" id="plansEmptyState" hidden>
+      <p>Inga listor än.</p>
+      <p>Skapa en t.ex. för en veckomeny eller en bjudning.</p>
+    </div>
+  </section>
+
+  <!-- PLAN DETAIL VIEW -->
+  <section id="view-plan-detail" hidden>
+    <a href="#" class="back-link" id="backFromPlanDetail">← Mina listor</a>
+    <div class="toolbar">
+      <h1 class="detail-title" id="planTitle" style="flex:1; font-size:1.3rem;"></h1>
+      <button class="btn-outline btn-danger" id="deletePlanBtn" type="button">Ta bort lista</button>
+    </div>
+    <div class="grid" id="planRecipeGrid"></div>
+    <div class="empty-state" id="planEmptyState" hidden>
+      <p>Inga recept i listan än.</p>
+      <p>Gå till receptlistan, klicka "Välj recept", markera recept och lägg till dem här.</p>
     </div>
   </section>
 
@@ -468,13 +533,14 @@
 
   <!-- DETAIL VIEW -->
   <section id="view-detail" hidden>
-    <a href="#" class="back-link" id="backFromDetail">← Alla recept</a>
+    <a href="#" class="back-link no-print" id="backFromDetail">← Alla recept</a>
+    <button class="btn-outline no-print" id="printBtn" type="button" style="margin-bottom:1.2rem;">Skriv ut recept</button>
     <img class="detail-image" id="dImage" alt="" hidden>
     <h1 class="detail-title" id="dTitle"></h1>
     <div class="detail-source" id="dCategory" style="font-style:italic;color:var(--copper-dark);"></div>
     <div class="rating" id="dRating"></div>
     <div class="owner-note" id="dOwnerNote" hidden></div>
-    <button class="btn-quiet" id="hideSharedBtn" type="button" style="display:block; margin-bottom:1.2rem;" hidden>Dölj från min lista</button>
+    <button class="btn-quiet no-print" id="hideSharedBtn" type="button" style="display:block; margin-bottom:1.2rem;" hidden>Dölj från min lista</button>
     <div class="detail-source" id="dSource"></div>
 
     <div class="detail-section" id="dIngredientsWrap">
@@ -486,12 +552,12 @@
       <div class="instructions" id="dInstructions"></div>
     </div>
 
-    <div class="detail-actions" id="dOwnerActions">
+    <div class="detail-actions no-print" id="dOwnerActions">
       <button class="btn-outline" id="editBtn" type="button">Redigera recept</button>
       <button class="btn-outline btn-danger" id="deleteBtn" type="button">Ta bort recept</button>
     </div>
 
-    <div class="panel share-panel" id="sharePanel">
+    <div class="panel share-panel no-print" id="sharePanel">
       <h3>Delat med</h3>
       <ul class="share-list" id="shareList"></ul>
       <div class="share-add-row">
@@ -606,6 +672,7 @@ auth.onAuthStateChanged(user => {
     newBtn.textContent = "+ Nytt recept";
     subscribeToRecipes();
     subscribeToPrefs();
+    subscribeToPlans();
     showView("list");
   } else {
     currentUser = null;
@@ -613,9 +680,11 @@ auth.onAuthStateChanged(user => {
     sharedRecipes = [];
     recipesCache = [];
     hiddenSharedIds = [];
+    plansCache = [];
     if(unsubscribeOwned){ unsubscribeOwned(); unsubscribeOwned = null; }
     if(unsubscribeShared){ unsubscribeShared(); unsubscribeShared = null; }
     if(unsubscribePrefs){ unsubscribePrefs(); unsubscribePrefs = null; }
+    if(unsubscribePlans){ unsubscribePlans(); unsubscribePlans = null; }
     document.getElementById("accountBar").hidden = true;
     showView("login");
   }
@@ -722,13 +791,148 @@ async function removeShare(id, email){
   });
 }
 
+/* ---------- Plans (listor för planering) ---------- */
+let plansCache = [];
+let unsubscribePlans = null;
+let currentPlanId = null;
+
+function plansCollection(){
+  return db.collection("plans");
+}
+
+function subscribeToPlans(){
+  if(unsubscribePlans) unsubscribePlans();
+  unsubscribePlans = plansCollection()
+    .where("ownerId", "==", currentUser.uid)
+    .onSnapshot(snap => {
+      plansCache = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (a.name || "").localeCompare(b.name || "", "sv"));
+      renderPlansList();
+      updateSelectionPlanOptions();
+      if(currentPlanId) renderPlanDetail(currentPlanId);
+    }, err => console.error(err));
+}
+
+async function createPlan(name){
+  const doc = await plansCollection().add({
+    name: name.trim(),
+    ownerId: currentUser.uid,
+    recipeIds: [],
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  return doc.id;
+}
+
+async function deletePlan(id){
+  await plansCollection().doc(id).delete();
+}
+
+async function addRecipesToPlan(planId, recipeIds){
+  await plansCollection().doc(planId).update({
+    recipeIds: firebase.firestore.FieldValue.arrayUnion(...recipeIds)
+  });
+}
+
+async function removeRecipeFromPlan(planId, recipeId){
+  await plansCollection().doc(planId).update({
+    recipeIds: firebase.firestore.FieldValue.arrayRemove(recipeId)
+  });
+}
+
 /* ---------- View switching ---------- */
 function showView(name){
   document.getElementById("view-login").hidden = name !== "login";
   document.getElementById("view-list").hidden = name !== "list";
   document.getElementById("view-add").hidden = name !== "add";
   document.getElementById("view-detail").hidden = name !== "detail";
+  document.getElementById("view-plans").hidden = name !== "plans";
+  document.getElementById("view-plan-detail").hidden = name !== "plan-detail";
 }
+
+/* ---------- Plans views ---------- */
+function renderPlansList(){
+  const container = document.getElementById("plansContainer");
+  container.className = "grid";
+  container.innerHTML = "";
+  document.getElementById("plansEmptyState").hidden = plansCache.length > 0;
+  plansCache.forEach(p => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "card";
+    card.style.padding = "1rem 0.9rem";
+    card.addEventListener("click", () => {
+      currentPlanId = p.id;
+      renderPlanDetail(p.id);
+      showView("plan-detail");
+    });
+    const label = document.createElement("div");
+    label.className = "label";
+    label.textContent = p.name;
+    card.appendChild(label);
+    const count = document.createElement("div");
+    count.className = "category";
+    count.textContent = (Array.isArray(p.recipeIds) ? p.recipeIds.length : 0) + " recept";
+    card.appendChild(count);
+    container.appendChild(card);
+  });
+}
+
+function renderPlanDetail(id){
+  const plan = plansCache.find(p => p.id === id);
+  if(!plan) return;
+  document.getElementById("planTitle").textContent = plan.name;
+  const grid = document.getElementById("planRecipeGrid");
+  grid.innerHTML = "";
+  const recipeIds = Array.isArray(plan.recipeIds) ? plan.recipeIds : [];
+  const recipes = recipeIds.map(rid => recipesCache.find(r => r.id === rid)).filter(Boolean);
+  document.getElementById("planEmptyState").hidden = recipes.length > 0;
+  recipes.forEach(r => {
+    const wrapper = document.createElement("div");
+    const card = buildCard(r);
+    wrapper.appendChild(card);
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "btn-quiet";
+    removeBtn.style.cssText = "display:block;margin-top:0.3rem;font-size:0.78rem;";
+    removeBtn.textContent = "Ta bort från listan";
+    removeBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await removeRecipeFromPlan(id, r.id);
+    });
+    wrapper.appendChild(removeBtn);
+    grid.appendChild(wrapper);
+  });
+}
+
+document.getElementById("viewPlansBtn").addEventListener("click", () => {
+  renderPlansList();
+  showView("plans");
+});
+document.getElementById("backFromPlans").addEventListener("click", (e) => {
+  e.preventDefault();
+  showView("list");
+});
+document.getElementById("newPlanBtn").addEventListener("click", async () => {
+  const name = prompt('Namn på listan (t.ex. "Veckomeny v.38" eller "Kalas för Anna"):');
+  if(!name || !name.trim()) return;
+  const id = await createPlan(name.trim());
+  currentPlanId = id;
+  renderPlanDetail(id);
+  showView("plan-detail");
+});
+document.getElementById("backFromPlanDetail").addEventListener("click", (e) => {
+  e.preventDefault();
+  currentPlanId = null;
+  showView("plans");
+});
+document.getElementById("deletePlanBtn").addEventListener("click", async () => {
+  if(!currentPlanId) return;
+  if(confirm("Ta bort den här listan? (Recepten i den påverkas inte.)")){
+    await deletePlan(currentPlanId);
+    currentPlanId = null;
+    showView("plans");
+  }
+});
 
 document.getElementById("newRecipeBtn").addEventListener("click", () => {
   resetAddView();
@@ -827,11 +1031,27 @@ document.getElementById("fCategorySelect").addEventListener("change", (e) => {
   }
 });
 
+let selectionModeActive = false;
+let selectedRecipeIds = new Set();
+
 function buildCard(r){
   const card = document.createElement("button");
-  card.className = "card";
+  card.className = "card" + (selectionModeActive ? " selectable" : "") + (selectedRecipeIds.has(r.id) ? " selected" : "");
   card.type = "button";
-  card.addEventListener("click", () => openDetail(r.id));
+  card.addEventListener("click", () => {
+    if(selectionModeActive){
+      toggleSelection(r.id, card);
+    } else {
+      openDetail(r.id);
+    }
+  });
+
+  if(selectionModeActive){
+    const check = document.createElement("div");
+    check.className = "select-check";
+    check.textContent = "✓";
+    card.appendChild(check);
+  }
 
   if(r.image){
     const img = document.createElement("img");
@@ -863,6 +1083,98 @@ function buildCard(r){
   }
   return card;
 }
+
+function toggleSelection(id, cardEl){
+  if(selectedRecipeIds.has(id)){
+    selectedRecipeIds.delete(id);
+    cardEl.classList.remove("selected");
+  } else {
+    selectedRecipeIds.add(id);
+    cardEl.classList.add("selected");
+  }
+  updateSelectionBar();
+}
+
+function updateSelectionBar(){
+  const bar = document.getElementById("selectionBar");
+  const count = selectedRecipeIds.size;
+  bar.hidden = !selectionModeActive || count === 0;
+  document.getElementById("selectionCount").textContent = count + " valda";
+}
+
+function updateSelectionPlanOptions(){
+  const select = document.getElementById("selectionPlanSelect");
+  const previous = select.value;
+  select.innerHTML = '<option value="">Välj lista…</option>';
+  plansCache.forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.name + " (" + (Array.isArray(p.recipeIds) ? p.recipeIds.length : 0) + ")";
+    select.appendChild(opt);
+  });
+  const newOpt = document.createElement("option");
+  newOpt.value = "__new__";
+  newOpt.textContent = "+ Ny lista…";
+  select.appendChild(newOpt);
+  if(Array.from(select.options).some(o => o.value === previous)) select.value = previous;
+}
+
+document.getElementById("selectModeBtn").addEventListener("click", () => {
+  selectionModeActive = !selectionModeActive;
+  document.getElementById("selectModeBtn").textContent = selectionModeActive ? "Avbryt val" : "Välj recept";
+  if(!selectionModeActive){
+    selectedRecipeIds.clear();
+  }
+  updateSelectionBar();
+  renderGrid();
+});
+
+document.getElementById("selectionPlanSelect").addEventListener("change", (e) => {
+  document.getElementById("selectionNewPlanName").hidden = e.target.value !== "__new__";
+});
+
+document.getElementById("cancelSelectionBtn").addEventListener("click", () => {
+  selectedRecipeIds.clear();
+  selectionModeActive = false;
+  document.getElementById("selectModeBtn").textContent = "Välj recept";
+  updateSelectionBar();
+  renderGrid();
+});
+
+document.getElementById("addSelectionBtn").addEventListener("click", async () => {
+  const select = document.getElementById("selectionPlanSelect");
+  const btn = document.getElementById("addSelectionBtn");
+  let planId = select.value;
+  if(!planId){
+    alert("Välj eller skapa en lista först.");
+    return;
+  }
+  btn.disabled = true;
+  try{
+    if(planId === "__new__"){
+      const name = document.getElementById("selectionNewPlanName").value.trim();
+      if(!name){
+        alert("Ange ett namn på listan.");
+        btn.disabled = false;
+        return;
+      }
+      planId = await createPlan(name);
+    }
+    await addRecipesToPlan(planId, Array.from(selectedRecipeIds));
+    selectedRecipeIds.clear();
+    selectionModeActive = false;
+    document.getElementById("selectModeBtn").textContent = "Välj recept";
+    document.getElementById("selectionNewPlanName").value = "";
+    document.getElementById("selectionNewPlanName").hidden = true;
+    select.value = "";
+    updateSelectionBar();
+    renderGrid();
+  }catch(err){
+    alert("Kunde inte lägga till: " + err.message);
+  }finally{
+    btn.disabled = false;
+  }
+});
 
 function sortRecipes(list, mode){
   const sorted = list.slice();
@@ -1051,6 +1363,10 @@ document.getElementById("hideSharedBtn").addEventListener("click", async () => {
   if(!currentDetailId) return;
   await hideSharedRecipe(currentDetailId);
   showView("list");
+});
+
+document.getElementById("printBtn").addEventListener("click", () => {
+  window.print();
 });
 
 /* ---------- Rating ---------- */
@@ -1521,14 +1837,24 @@ document.getElementById("recipeForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const statusEl = document.getElementById("saveStatus");
   const saveBtn = document.getElementById("saveBtn");
-  saveBtn.disabled = true;
-  statusEl.textContent = "Sparar…";
 
   const title = document.getElementById("fTitle").value.trim();
   const categorySelectValue = document.getElementById("fCategorySelect").value;
   const category = categorySelectValue === "__new__"
     ? document.getElementById("fCategoryNew").value.trim()
     : categorySelectValue.trim();
+
+  if(!category){
+    const proceed = confirm("Du har inte angett någon kategori för receptet. Vill du spara ändå?");
+    if(!proceed){
+      document.getElementById("fCategorySelect").focus();
+      return;
+    }
+  }
+
+  saveBtn.disabled = true;
+  statusEl.textContent = "Sparar…";
+
   const ingredients = document.getElementById("fIngredients").value
     .split("\n").map(s => s.trim()).filter(Boolean);
   const instructions = document.getElementById("fInstructions").value.trim();
