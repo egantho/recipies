@@ -77,11 +77,11 @@
     font-weight: 600;
     letter-spacing: 0.2px;
   }
-  header.top .box-code{
+  header.top .account{
     font-size: 0.82rem;
     color: var(--ink-soft);
   }
-  header.top .box-code button{
+  header.top .account button{
     color: var(--copper-dark);
     text-decoration: underline;
     text-underline-offset: 2px;
@@ -264,7 +264,25 @@
   }
   .detail-section ul{ margin:0; padding-left: 1.2rem; line-height: 1.75; }
   .detail-section .instructions{ line-height: 1.75; white-space: pre-wrap; }
-  .detail-actions{ display:flex; gap:1rem; margin-top: 2rem; }
+  .detail-actions{ display:flex; gap:1rem; margin-top: 2rem; flex-wrap: wrap; }
+
+  .owner-note{
+    font-size: 0.85rem; color: var(--ink-soft); font-style: italic;
+    margin-bottom: 1.2rem;
+  }
+  .share-panel{ margin-top: 2rem; }
+  .share-panel h3{
+    font-size: 0.85rem; color: var(--copper-dark); margin-bottom: 0.6rem;
+    border-bottom: 1px solid var(--line); padding-bottom: 0.3rem;
+  }
+  .share-list{ list-style:none; margin:0 0 0.8rem; padding:0; }
+  .share-list li{
+    display:flex; justify-content:space-between; align-items:center;
+    padding: 0.3rem 0; font-size: 0.9rem; border-bottom: 1px solid var(--line);
+  }
+  .share-list li button{ color: var(--danger); font-size: 0.8rem; text-decoration: underline; }
+  .share-add-row{ display:flex; gap:0.5rem; }
+  .share-add-row input{ flex:1; }
 
   .back-link{
     display:inline-block; margin-bottom: 1.1rem;
@@ -294,14 +312,39 @@
 
   <header class="top">
     <div class="brand">Receptlådan</div>
-    <div class="box-code">
-      Kod: <strong id="boxCodeLabel">…</strong>
-      · <button id="changeCodeBtn" type="button">byt/dela kod</button>
+    <div class="account" id="accountBar" hidden>
+      <span id="userEmailLabel"></span>
+      · <button id="signOutBtn" type="button">logga ut</button>
     </div>
   </header>
 
+  <!-- LOGIN VIEW -->
+  <section id="view-login">
+    <div class="panel" style="max-width:360px; margin: 3rem auto 0;">
+      <h2 id="authHeading">Logga in</h2>
+      <form id="authForm" class="recipe-form">
+        <label for="authEmail">E-post</label>
+        <input type="email" id="authEmail" required autocomplete="email">
+
+        <label for="authPassword">Lösenord</label>
+        <input type="password" id="authPassword" required autocomplete="current-password" minlength="6">
+
+        <div class="form-actions">
+          <button class="btn-primary" type="submit" id="authSubmitBtn">Logga in</button>
+          <span class="status-line" id="authStatus"></span>
+        </div>
+      </form>
+      <p class="hint">
+        <button class="btn-quiet" id="authToggleBtn" type="button">Har du inget konto? Skapa ett</button>
+      </p>
+      <p class="hint">
+        <button class="btn-quiet" id="authForgotBtn" type="button">Glömt lösenordet?</button>
+      </p>
+    </div>
+  </section>
+
   <!-- LIST VIEW -->
-  <section id="view-list">
+  <section id="view-list" hidden>
     <div class="toolbar">
       <input type="search" id="searchInput" placeholder="Sök bland dina recept…">
       <select id="categoryFilter">
@@ -383,6 +426,7 @@
     <img class="detail-image" id="dImage" alt="" hidden>
     <h1 class="detail-title" id="dTitle"></h1>
     <div class="detail-source" id="dCategory" style="font-style:italic;color:var(--copper-dark);"></div>
+    <div class="owner-note" id="dOwnerNote" hidden></div>
     <div class="detail-source" id="dSource"></div>
 
     <div class="detail-section" id="dIngredientsWrap">
@@ -394,9 +438,19 @@
       <div class="instructions" id="dInstructions"></div>
     </div>
 
-    <div class="detail-actions">
+    <div class="detail-actions" id="dOwnerActions">
       <button class="btn-outline" id="editBtn" type="button">Redigera recept</button>
       <button class="btn-outline btn-danger" id="deleteBtn" type="button">Ta bort recept</button>
+    </div>
+
+    <div class="panel share-panel" id="sharePanel">
+      <h3>Delat med</h3>
+      <ul class="share-list" id="shareList"></ul>
+      <div class="share-add-row">
+        <input type="email" id="shareEmailInput" placeholder="namn@exempel.se">
+        <button class="btn-outline" id="shareAddBtn" type="button">Dela</button>
+      </div>
+      <div class="status-line" id="shareStatus"></div>
     </div>
   </section>
 
@@ -406,7 +460,7 @@
 /* =========================================================
    FIREBASE SETUP
    Skapa ett Firebase-projekt (firebase.google.com), aktivera
-   Firestore och "Anonym" inloggning under Authentication,
+   Firestore och "E-post/lösenord" under Authentication → Sign-in method,
    och klistra in din config nedan.
    ========================================================= */
 const firebaseConfig = {
@@ -424,98 +478,151 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 
 let currentUser = null;
-let boxCode = null;
-let unsubscribeRecipes = null;
+let unsubscribeOwned = null;
+let unsubscribeShared = null;
+let ownedRecipes = [];
+let sharedRecipes = [];
 let recipesCache = [];
 let currentDetailId = null;
 
-/* ---------- Box code (delad "kod" mellan enheter) ---------- */
-function randomCode(){
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let out = "";
-  for(let i=0;i<6;i++) out += alphabet[Math.floor(Math.random()*alphabet.length)];
-  return out;
+/* ---------- Auth ---------- */
+let authMode = "login"; // "login" or "register"
+
+function setAuthMode(mode){
+  authMode = mode;
+  document.getElementById("authHeading").textContent = mode === "login" ? "Logga in" : "Skapa konto";
+  document.getElementById("authSubmitBtn").textContent = mode === "login" ? "Logga in" : "Skapa konto";
+  document.getElementById("authToggleBtn").textContent = mode === "login"
+    ? "Har du inget konto? Skapa ett"
+    : "Har du redan ett konto? Logga in";
+  document.getElementById("authStatus").textContent = "";
 }
 
-function loadBoxCode(){
-  let code = localStorage.getItem("receptladan_code");
-  if(!code){
-    code = randomCode();
-    localStorage.setItem("receptladan_code", code);
+document.getElementById("authToggleBtn").addEventListener("click", () => {
+  setAuthMode(authMode === "login" ? "register" : "login");
+});
+
+document.getElementById("authForgotBtn").addEventListener("click", async () => {
+  const email = document.getElementById("authEmail").value.trim();
+  const statusEl = document.getElementById("authStatus");
+  if(!email){
+    statusEl.className = "status-line err";
+    statusEl.textContent = "Fyll i din e-postadress ovan först.";
+    return;
   }
-  return code;
-}
-
-function setBoxCode(code){
-  boxCode = code.toUpperCase().trim();
-  localStorage.setItem("receptladan_code", boxCode);
-  document.getElementById("boxCodeLabel").textContent = boxCode;
-  subscribeToRecipes();
-}
-
-document.getElementById("changeCodeBtn").addEventListener("click", () => {
-  const entered = prompt(
-    "Din kod (dela den för att se samma recept på en annan enhet):",
-    boxCode
-  );
-  if(entered && entered.trim()){
-    setBoxCode(entered);
+  try{
+    await auth.sendPasswordResetEmail(email);
+    statusEl.className = "status-line ok";
+    statusEl.textContent = "Ett återställningsmejl har skickats till " + email + ".";
+  }catch(err){
+    statusEl.className = "status-line err";
+    statusEl.textContent = "Kunde inte skicka: " + err.message;
   }
 });
 
-/* ---------- Auth ---------- */
+document.getElementById("authForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = document.getElementById("authEmail").value.trim();
+  const password = document.getElementById("authPassword").value;
+  const statusEl = document.getElementById("authStatus");
+  const submitBtn = document.getElementById("authSubmitBtn");
+  submitBtn.disabled = true;
+  statusEl.className = "status-line ok";
+  statusEl.textContent = authMode === "login" ? "Loggar in…" : "Skapar konto…";
+
+  try{
+    if(authMode === "login"){
+      await auth.signInWithEmailAndPassword(email, password);
+    } else {
+      await auth.createUserWithEmailAndPassword(email, password);
+    }
+  }catch(err){
+    statusEl.className = "status-line err";
+    statusEl.textContent = "Fel: " + err.message;
+  }finally{
+    submitBtn.disabled = false;
+  }
+});
+
+document.getElementById("signOutBtn").addEventListener("click", () => {
+  auth.signOut();
+});
+
 auth.onAuthStateChanged(user => {
   if(user){
     currentUser = user;
-    boxCode = loadBoxCode();
-    document.getElementById("boxCodeLabel").textContent = boxCode;
-    subscribeToRecipes();
+    document.getElementById("accountBar").hidden = false;
+    document.getElementById("userEmailLabel").textContent = user.email;
     const newBtn = document.getElementById("newRecipeBtn");
     newBtn.disabled = false;
     newBtn.textContent = "+ Nytt recept";
+    subscribeToRecipes();
+    showView("list");
+  } else {
+    currentUser = null;
+    ownedRecipes = [];
+    sharedRecipes = [];
+    recipesCache = [];
+    if(unsubscribeOwned){ unsubscribeOwned(); unsubscribeOwned = null; }
+    if(unsubscribeShared){ unsubscribeShared(); unsubscribeShared = null; }
+    document.getElementById("accountBar").hidden = true;
+    showView("login");
   }
-});
-auth.signInAnonymously().catch(err => {
-  console.error("Inloggning misslyckades", err);
-  document.getElementById("boxCodeLabel").textContent = "ej ansluten";
-  document.getElementById("emptyState").hidden = false;
-  document.getElementById("emptyState").innerHTML =
-    "<p>Kunde inte logga in mot Firebase.</p>" +
-    "<p>Kontrollera att Anonym inloggning är aktiverad under Authentication → Sign-in method, och att firebaseConfig i koden stämmer.</p>" +
-    "<p style=\"font-size:0.85rem\">Felmeddelande: " + (err && err.message ? err.message : err) + "</p>";
 });
 
 /* ---------- Firestore ---------- */
 function recipesCollection(){
-  return db.collection("recipeBoxes").doc(boxCode).collection("recipes");
+  return db.collection("recipes");
+}
+
+function mergeAndRender(){
+  const merged = new Map();
+  ownedRecipes.forEach(r => merged.set(r.id, r));
+  sharedRecipes.forEach(r => { if(!merged.has(r.id)) merged.set(r.id, r); });
+  recipesCache = Array.from(merged.values()).sort((a, b) => {
+    const at = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
+    const bt = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
+    return bt - at;
+  });
+  updateCategoryOptions();
+  renderGrid();
 }
 
 function subscribeToRecipes(){
-  if(unsubscribeRecipes) unsubscribeRecipes();
-  unsubscribeRecipes = recipesCollection()
-    .orderBy("createdAt", "desc")
+  if(unsubscribeOwned) unsubscribeOwned();
+  if(unsubscribeShared) unsubscribeShared();
+
+  unsubscribeOwned = recipesCollection()
+    .where("ownerId", "==", currentUser.uid)
     .onSnapshot(snap => {
-      recipesCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      updateCategoryOptions();
-      renderGrid();
-    }, err => {
-      console.error(err);
-    });
+      ownedRecipes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      mergeAndRender();
+    }, err => console.error(err));
+
+  unsubscribeShared = recipesCollection()
+    .where("sharedWith", "array-contains", (currentUser.email || "").toLowerCase())
+    .onSnapshot(snap => {
+      sharedRecipes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      mergeAndRender();
+    }, err => console.error(err));
 }
 
 async function saveRecipe(recipe){
-  if(!boxCode){
-    throw new Error("Inte ansluten till databasen än – vänta en stund och försök igen.");
+  if(!currentUser){
+    throw new Error("Inte inloggad.");
   }
   await recipesCollection().add({
     ...recipe,
+    ownerId: currentUser.uid,
+    ownerEmail: (currentUser.email || "").toLowerCase(),
+    sharedWith: [],
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 }
 
 async function updateRecipe(id, recipe){
-  if(!boxCode){
-    throw new Error("Inte ansluten till databasen än – vänta en stund och försök igen.");
+  if(!currentUser){
+    throw new Error("Inte inloggad.");
   }
   await recipesCollection().doc(id).update({
     ...recipe,
@@ -527,8 +634,21 @@ async function deleteRecipe(id){
   await recipesCollection().doc(id).delete();
 }
 
+async function addShare(id, email){
+  await recipesCollection().doc(id).update({
+    sharedWith: firebase.firestore.FieldValue.arrayUnion(email.toLowerCase().trim())
+  });
+}
+
+async function removeShare(id, email){
+  await recipesCollection().doc(id).update({
+    sharedWith: firebase.firestore.FieldValue.arrayRemove(email.toLowerCase().trim())
+  });
+}
+
 /* ---------- View switching ---------- */
 function showView(name){
+  document.getElementById("view-login").hidden = name !== "login";
   document.getElementById("view-list").hidden = name !== "list";
   document.getElementById("view-add").hidden = name !== "add";
   document.getElementById("view-detail").hidden = name !== "detail";
@@ -677,6 +797,20 @@ function openDetail(id){
   document.getElementById("dTitle").textContent = r.title || "Namnlöst recept";
   document.getElementById("dCategory").textContent = r.category || "";
 
+  const isOwner = r.ownerId === currentUser.uid;
+  document.getElementById("dOwnerActions").hidden = !isOwner;
+  document.getElementById("sharePanel").hidden = !isOwner;
+  const ownerNote = document.getElementById("dOwnerNote");
+  if(!isOwner){
+    ownerNote.hidden = false;
+    ownerNote.textContent = "Delat med dig av " + (r.ownerEmail || "en annan användare") + " – du kan läsa men inte ändra.";
+  } else {
+    ownerNote.hidden = true;
+  }
+  if(isOwner){
+    renderShareList(r);
+  }
+
   const srcEl = document.getElementById("dSource");
   if(r.sourceUrl){
     srcEl.innerHTML = "Ursprung: <a href=\"" + r.sourceUrl + "\" target=\"_blank\" rel=\"noopener\">" + r.sourceUrl + "</a>";
@@ -719,6 +853,66 @@ document.getElementById("deleteBtn").addEventListener("click", async () => {
   }
 });
 
+/* ---------- Sharing ---------- */
+function renderShareList(recipe){
+  const list = document.getElementById("shareList");
+  list.innerHTML = "";
+  const shared = Array.isArray(recipe.sharedWith) ? recipe.sharedWith : [];
+  if(!shared.length){
+    const li = document.createElement("li");
+    li.textContent = "Inte delat med någon än.";
+    li.style.color = "var(--ink-soft)";
+    list.appendChild(li);
+    return;
+  }
+  shared.forEach(email => {
+    const li = document.createElement("li");
+    const span = document.createElement("span");
+    span.textContent = email;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = "ta bort";
+    btn.addEventListener("click", async () => {
+      await removeShare(currentDetailId, email);
+      recipe.sharedWith = shared.filter(e => e !== email);
+      renderShareList(recipe);
+    });
+    li.appendChild(span);
+    li.appendChild(btn);
+    list.appendChild(li);
+  });
+}
+
+document.getElementById("shareAddBtn").addEventListener("click", async () => {
+  const input = document.getElementById("shareEmailInput");
+  const statusEl = document.getElementById("shareStatus");
+  const email = input.value.trim().toLowerCase();
+  if(!email || !email.includes("@")){
+    statusEl.className = "status-line err";
+    statusEl.textContent = "Ange en giltig e-postadress.";
+    return;
+  }
+  const recipe = recipesCache.find(x => x.id === currentDetailId);
+  if(recipe && recipe.ownerEmail === email){
+    statusEl.className = "status-line err";
+    statusEl.textContent = "Det är redan ditt eget recept.";
+    return;
+  }
+  try{
+    await addShare(currentDetailId, email);
+    if(recipe){
+      recipe.sharedWith = Array.isArray(recipe.sharedWith) ? [...recipe.sharedWith, email] : [email];
+      renderShareList(recipe);
+    }
+    input.value = "";
+    statusEl.className = "status-line ok";
+    statusEl.textContent = "Delat med " + email + ".";
+  }catch(err){
+    statusEl.className = "status-line err";
+    statusEl.textContent = "Kunde inte dela: " + err.message;
+  }
+});
+
 /* ---------- Add view: reset ---------- */
 let editingRecipeId = null;
 let fetchedSourceUrl = "";
@@ -750,6 +944,7 @@ function resetAddView(){
 function openEditor(id){
   const r = recipesCache.find(x => x.id === id);
   if(!r) return;
+  if(r.ownerId !== currentUser.uid) return;
 
   resetAddView();
   editingRecipeId = id;
