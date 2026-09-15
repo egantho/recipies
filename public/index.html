@@ -101,6 +101,11 @@
   .toolbar-actions{
     display:flex; gap:0.7rem; flex-wrap: wrap;
   }
+  .checkbox-label{
+    display:flex; align-items:center; gap:0.4rem;
+    font-size: 0.88rem; color: var(--ink-soft);
+    white-space: nowrap;
+  }
   .category-section{ margin-bottom: 2.2rem; }
   .category-section-heading{
     display:flex; justify-content:space-between; align-items:baseline;
@@ -445,6 +450,10 @@
         <option value="alpha-asc">Bokstavsordning: A-Ö</option>
         <option value="alpha-desc">Bokstavsordning: Ö-A</option>
       </select>
+      <label class="checkbox-label" id="showSubcatsLabel" hidden>
+        <input type="checkbox" id="showSubcatsCheckbox">
+        Visa underkategorier
+      </label>
       <div class="toolbar-actions">
         <button class="btn-outline" id="viewPlansBtn" type="button">Mina listor</button>
         <button class="btn-outline" id="selectModeBtn" type="button">Välj recept</button>
@@ -1004,13 +1013,24 @@ document.getElementById("searchInput").addEventListener("input", renderGrid);
 document.getElementById("categoryFilter").addEventListener("change", renderGrid);
 document.getElementById("sortMode").addEventListener("change", () => {
   localStorage.setItem("receptladan_sortmode", document.getElementById("sortMode").value);
+  updateSubcatsCheckboxVisibility();
   renderGrid();
 });
+document.getElementById("showSubcatsCheckbox").addEventListener("change", () => {
+  localStorage.setItem("receptladan_showsubcats", document.getElementById("showSubcatsCheckbox").checked ? "1" : "0");
+  renderGrid();
+});
+function updateSubcatsCheckboxVisibility(){
+  document.getElementById("showSubcatsLabel").hidden = document.getElementById("sortMode").value !== "";
+}
 (function initSortMode(){
   const saved = localStorage.getItem("receptladan_sortmode");
   if(saved !== null){
     document.getElementById("sortMode").value = saved;
   }
+  const savedSubcats = localStorage.getItem("receptladan_showsubcats");
+  document.getElementById("showSubcatsCheckbox").checked = savedSubcats === "1";
+  updateSubcatsCheckboxVisibility();
 })();
 
 function categoryDisplay(cat){
@@ -1246,6 +1266,7 @@ function jumpToCategory(cat){
   if(!document.getElementById("sortMode").value){
     document.getElementById("sortMode").value = "date-desc";
   }
+  updateSubcatsCheckboxVisibility();
   renderGrid();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -1286,6 +1307,7 @@ function renderGrid(){
 }
 
 const RECIPES_PER_SUBGROUP_PREVIEW = 4;
+const RECIPES_PER_TOPLEVEL_PREVIEW = 6;
 
 function buildCategoryTree(){
   const tree = new Map(); // Map<topLevel, Map<subLabel, recipe[]>>
@@ -1309,6 +1331,7 @@ function buildCategoryTree(){
 function renderGroupedByCategory(container){
   container.innerHTML = "";
 
+  const showSubcats = document.getElementById("showSubcatsCheckbox").checked;
   const tree = buildCategoryTree();
 
   const topNames = Array.from(tree.keys()).sort((a, b) => {
@@ -1319,8 +1342,9 @@ function renderGroupedByCategory(container){
 
   topNames.forEach(topName => {
     const subMap = tree.get(topName);
-    const allIds = new Set();
-    subMap.forEach(list => list.forEach(r => allIds.add(r.id)));
+    const allRecipesMap = new Map();
+    subMap.forEach(list => list.forEach(r => allRecipesMap.set(r.id, r)));
+    const totalCount = allRecipesMap.size;
 
     const section = document.createElement("div");
     section.className = "category-section";
@@ -1328,10 +1352,11 @@ function renderGroupedByCategory(container){
     const heading = document.createElement("div");
     heading.className = "category-section-heading";
     const h2 = document.createElement("h2");
-    h2.textContent = topName + " (" + allIds.size + ")";
+    h2.textContent = topName + " (" + totalCount + ")";
     heading.appendChild(h2);
 
-    if(allIds.size > RECIPES_PER_SUBGROUP_PREVIEW){
+    const previewLimit = showSubcats ? RECIPES_PER_SUBGROUP_PREVIEW : RECIPES_PER_TOPLEVEL_PREVIEW;
+    if(totalCount > previewLimit){
       const showAllBtn = document.createElement("button");
       showAllBtn.type = "button";
       showAllBtn.textContent = "Visa alla →";
@@ -1339,6 +1364,16 @@ function renderGroupedByCategory(container){
       heading.appendChild(showAllBtn);
     }
     section.appendChild(heading);
+
+    if(!showSubcats){
+      const sorted = sortRecipes(Array.from(allRecipesMap.values()), "date-desc");
+      const grid = document.createElement("div");
+      grid.className = "grid";
+      sorted.slice(0, RECIPES_PER_TOPLEVEL_PREVIEW).forEach(r => grid.appendChild(buildCard(r)));
+      section.appendChild(grid);
+      container.appendChild(section);
+      return;
+    }
 
     const subNames = Array.from(subMap.keys()).sort((a, b) => {
       if(a === "") return -1;
