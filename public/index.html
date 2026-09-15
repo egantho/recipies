@@ -117,6 +117,14 @@
     font-size: 0.92rem; font-style: italic; color: var(--ink-soft);
     margin: 0 0 0.6rem 0.2rem;
   }
+  .category-suggestions{
+    display:flex; flex-wrap:wrap; gap:0.4rem; margin-top: 0.5rem;
+  }
+  .category-suggestion-btn{
+    font-size: 0.8rem; border: 1px solid var(--line); border-radius: 999px;
+    padding: 0.2rem 0.7rem; color: var(--ink-soft); background: var(--paper-raised);
+  }
+  .category-suggestion-btn:hover{ border-color: var(--copper); color: var(--copper-dark); }
   .btn-primary{
     background: var(--copper);
     color: #fff;
@@ -522,8 +530,8 @@
         <input type="text" id="fTitle" required>
 
         <label for="fCategoryText">Kategori(er)</label>
-        <input type="text" id="fCategoryText" list="categoryDatalist" placeholder="t.ex. Bakverk/Bullar; Fika">
-        <datalist id="categoryDatalist"></datalist>
+        <input type="text" id="fCategoryText" placeholder="t.ex. Bakverk/Bullar; Fika">
+        <div class="category-suggestions" id="categorySuggestions"></div>
         <p class="hint" style="margin-top:0.3rem;">Flera kategorier avskiljs med semikolon ( ; ), t.ex. "Bakverk/Bullar; Fika". Skriv "Huvudkategori/Underkategori" för en underkategori.</p>
 
         <label for="fPortions">Antal portioner</label>
@@ -1040,12 +1048,23 @@ function updateCategoryOptions(){
   });
   if(categories.includes(previousValue)) filterSelect.value = previousValue;
 
-  const datalist = document.getElementById("categoryDatalist");
-  datalist.innerHTML = "";
+  const suggestWrap = document.getElementById("categorySuggestions");
+  suggestWrap.innerHTML = "";
   categories.forEach(cat => {
-    const opt = document.createElement("option");
-    opt.value = cat;
-    datalist.appendChild(opt);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "category-suggestion-btn";
+    btn.textContent = categoryDisplay(cat);
+    btn.addEventListener("click", () => {
+      const input = document.getElementById("fCategoryText");
+      const existing = getCategoryEntries(input.value);
+      if(!existing.includes(cat)){
+        existing.push(cat);
+        input.value = existing.join("; ");
+      }
+      input.focus();
+    });
+    suggestWrap.appendChild(btn);
   });
 }
 
