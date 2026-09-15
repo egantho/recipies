@@ -106,6 +106,36 @@
     font-size: 0.88rem; color: var(--ink-soft);
     white-space: nowrap;
   }
+  .shopping-items{ list-style:none; margin:0; padding:0; }
+  .shopping-items li{
+    display:flex; justify-content:space-between; align-items:center;
+    gap:0.7rem; padding: 0.6rem 0; border-bottom: 1px solid var(--line);
+  }
+  .shopping-items .item-text{ flex:1; }
+  .shopping-items .item-source{
+    font-size: 0.78rem; color: var(--ink-soft); font-style: italic;
+    display:block; margin-top: 0.1rem;
+  }
+  .shopping-items button{
+    font-size: 0.8rem; color: var(--danger);
+    text-decoration: underline; white-space: nowrap;
+  }
+  .shopping-preview-list{
+    list-style:none; margin:0; padding:0;
+    max-height: 260px; overflow-y: auto;
+    border: 1px solid var(--line); border-radius: 3px;
+  }
+  .shopping-preview-list li{
+    display:flex; align-items:flex-start; gap:0.5rem;
+    padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--line);
+    font-size: 0.9rem;
+  }
+  .shopping-preview-list li:last-child{ border-bottom: none; }
+  .shopping-preview-list input[type=checkbox]{ margin-top: 0.2rem; flex-shrink:0; }
+  .shopping-preview-list label{ flex:1; cursor:pointer; }
+  .shopping-preview-list .item-source{
+    font-size: 0.76rem; color: var(--ink-soft); font-style: italic; display:block;
+  }
   .category-section{ margin-bottom: 2.2rem; }
   .category-section-heading{
     display:flex; justify-content:space-between; align-items:baseline;
@@ -456,6 +486,7 @@
       </label>
       <div class="toolbar-actions">
         <button class="btn-outline" id="viewPlansBtn" type="button">Mina listor</button>
+        <button class="btn-outline" id="viewShoppingListsBtn" type="button">Inköpslistor</button>
         <button class="btn-outline" id="selectModeBtn" type="button">Välj recept</button>
         <button class="btn-primary" id="newRecipeBtn" type="button" disabled>Ansluter…</button>
       </div>
@@ -498,12 +529,57 @@
     <a href="#" class="back-link" id="backFromPlanDetail">← Mina listor</a>
     <div class="toolbar">
       <h1 class="detail-title" id="planTitle" style="flex:1; font-size:1.3rem;"></h1>
+      <button class="btn-outline" id="planToShoppingListBtn" type="button">Lägg till ingredienser i inköpslista</button>
       <button class="btn-outline btn-danger" id="deletePlanBtn" type="button">Ta bort lista</button>
+    </div>
+    <div class="panel" id="planShoppingPanel" hidden>
+      <p class="hint" style="margin-top:0;">Bocka ur det du inte vill ha med:</p>
+      <ul class="shopping-preview-list" id="planShoppingPreviewList"></ul>
+      <div class="selection-bar" style="margin-top:0.8rem;">
+        <select id="planShoppingSelect">
+          <option value="">Välj inköpslista…</option>
+          <option value="__new__">+ Ny inköpslista…</option>
+        </select>
+        <input type="text" id="planShoppingNewName" placeholder="Namn på ny inköpslista" hidden>
+        <button class="btn-primary" id="planShoppingConfirmBtn" type="button">Lägg till</button>
+        <span class="status-line" id="planShoppingStatus"></span>
+      </div>
     </div>
     <div class="grid" id="planRecipeGrid"></div>
     <div class="empty-state" id="planEmptyState" hidden>
       <p>Inga recept i listan än.</p>
       <p>Gå till receptlistan, klicka "Välj recept", markera recept och lägg till dem här.</p>
+    </div>
+  </section>
+
+  <!-- SHOPPING LISTS OVERVIEW -->
+  <section id="view-shopping-lists" hidden>
+    <a href="#" class="back-link" id="backFromShoppingLists">← Alla recept</a>
+    <div class="toolbar">
+      <h1 class="detail-title" style="flex:1; font-size:1.3rem;">Inköpslistor</h1>
+      <button class="btn-primary" id="newShoppingListBtn" type="button">+ Ny inköpslista</button>
+    </div>
+    <div id="shoppingListsContainer"></div>
+    <div class="empty-state" id="shoppingListsEmptyState" hidden>
+      <p>Inga inköpslistor än.</p>
+      <p>Skapa en direkt här, eller lägg till ingredienser från ett recept eller en lista.</p>
+    </div>
+  </section>
+
+  <!-- SHOPPING LIST DETAIL -->
+  <section id="view-shopping-list-detail" hidden>
+    <a href="#" class="back-link" id="backFromShoppingListDetail">← Inköpslistor</a>
+    <div class="toolbar">
+      <h1 class="detail-title" id="shoppingListTitle" style="flex:1; font-size:1.3rem;"></h1>
+      <button class="btn-outline btn-danger" id="deleteShoppingListBtn" type="button">Ta bort inköpslista</button>
+    </div>
+    <div class="field-row" style="margin-bottom:1.2rem;">
+      <input type="text" id="shoppingItemInput" placeholder="Lägg till egen post, t.ex. hushållspapper">
+      <button class="btn-outline" id="addShoppingItemBtn" type="button">Lägg till</button>
+    </div>
+    <ul class="shopping-items" id="shoppingItemsList"></ul>
+    <div class="empty-state" id="shoppingItemsEmptyState" hidden>
+      <p>Inköpslistan är tom.</p>
     </div>
   </section>
 
@@ -575,6 +651,7 @@
     <div class="no-print" style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:1.2rem;">
       <button class="btn-outline" id="printBtn" type="button">Skriv ut recept</button>
       <button class="btn-outline" id="addToListBtn" type="button">Lägg till i lista</button>
+      <button class="btn-outline" id="recipeToShoppingListBtn" type="button">Lägg till i inköpslista</button>
     </div>
     <div class="panel selection-bar no-print" id="addToListPanel" hidden>
       <select id="addToListSelect">
@@ -584,6 +661,19 @@
       <input type="text" id="addToListNewName" placeholder="Namn på ny lista" hidden>
       <button class="btn-primary" id="addToListConfirmBtn" type="button">Lägg till</button>
       <span class="status-line" id="addToListStatus"></span>
+    </div>
+    <div class="panel no-print" id="recipeShoppingPanel" hidden>
+      <p class="hint" style="margin-top:0;">Bocka ur det du inte vill ha med:</p>
+      <ul class="shopping-preview-list" id="recipeShoppingPreviewList"></ul>
+      <div class="selection-bar" style="margin-top:0.8rem;">
+        <select id="recipeShoppingSelect">
+          <option value="">Välj inköpslista…</option>
+          <option value="__new__">+ Ny inköpslista…</option>
+        </select>
+        <input type="text" id="recipeShoppingNewName" placeholder="Namn på ny inköpslista" hidden>
+        <button class="btn-primary" id="recipeShoppingConfirmBtn" type="button">Lägg till</button>
+        <span class="status-line" id="recipeShoppingStatus"></span>
+      </div>
     </div>
     <img class="detail-image" id="dImage" alt="" hidden>
     <h1 class="detail-title" id="dTitle"></h1>
@@ -732,6 +822,7 @@ auth.onAuthStateChanged(user => {
     subscribeToRecipes();
     subscribeToPrefs();
     subscribeToPlans();
+    subscribeToShoppingLists();
     showView("list");
   } else {
     currentUser = null;
@@ -740,10 +831,12 @@ auth.onAuthStateChanged(user => {
     recipesCache = [];
     hiddenSharedIds = [];
     plansCache = [];
+    shoppingListsCache = [];
     if(unsubscribeOwned){ unsubscribeOwned(); unsubscribeOwned = null; }
     if(unsubscribeShared){ unsubscribeShared(); unsubscribeShared = null; }
     if(unsubscribePrefs){ unsubscribePrefs(); unsubscribePrefs = null; }
     if(unsubscribePlans){ unsubscribePlans(); unsubscribePlans = null; }
+    if(unsubscribeShoppingLists){ unsubscribeShoppingLists(); unsubscribeShoppingLists = null; }
     document.getElementById("accountBar").hidden = true;
     showView("login");
   }
@@ -898,6 +991,72 @@ async function removeRecipeFromPlan(planId, recipeId){
   });
 }
 
+/* ---------- Shopping lists (inköpslistor) ---------- */
+let shoppingListsCache = [];
+let unsubscribeShoppingLists = null;
+let currentShoppingListId = null;
+
+function shoppingListsCollection(){
+  return db.collection("shoppingLists");
+}
+
+function genItemId(){
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function subscribeToShoppingLists(){
+  if(unsubscribeShoppingLists) unsubscribeShoppingLists();
+  unsubscribeShoppingLists = shoppingListsCollection()
+    .where("ownerId", "==", currentUser.uid)
+    .onSnapshot(snap => {
+      shoppingListsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (a.name || "").localeCompare(b.name || "", "sv"));
+      renderShoppingListsOverview();
+      updateShoppingListOptions();
+      if(currentShoppingListId) renderShoppingListDetail(currentShoppingListId);
+    }, err => console.error(err));
+}
+
+async function createShoppingList(name, initialItems){
+  const doc = await shoppingListsCollection().add({
+    name: name.trim(),
+    ownerId: currentUser.uid,
+    items: initialItems || [],
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  return doc.id;
+}
+
+async function deleteShoppingList(id){
+  await shoppingListsCollection().doc(id).delete();
+}
+
+async function appendItemsToShoppingList(id, newItems){
+  const list = shoppingListsCache.find(l => l.id === id);
+  const current = (list && Array.isArray(list.items)) ? list.items : [];
+  await shoppingListsCollection().doc(id).update({ items: current.concat(newItems) });
+}
+
+async function removeShoppingItem(id, itemId){
+  const list = shoppingListsCache.find(l => l.id === id);
+  const current = (list && Array.isArray(list.items)) ? list.items : [];
+  const updated = current.filter(it => it.id !== itemId);
+  await shoppingListsCollection().doc(id).update({ items: updated });
+}
+
+function ingredientsAsShoppingItems(recipe){
+  const ingredients = Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
+  return ingredients.map(text => ({ id: genItemId(), text, source: recipe.title || "" }));
+}
+
+function collectShoppingItemsFromPlan(plan){
+  const recipeIds = Array.isArray(plan.recipeIds) ? plan.recipeIds : [];
+  const recipes = recipeIds.map(rid => recipesCache.find(r => r.id === rid)).filter(Boolean);
+  let items = [];
+  recipes.forEach(r => { items = items.concat(ingredientsAsShoppingItems(r)); });
+  return items;
+}
+
 /* ---------- View switching ---------- */
 function showView(name){
   document.getElementById("view-login").hidden = name !== "login";
@@ -906,6 +1065,8 @@ function showView(name){
   document.getElementById("view-detail").hidden = name !== "detail";
   document.getElementById("view-plans").hidden = name !== "plans";
   document.getElementById("view-plan-detail").hidden = name !== "plan-detail";
+  document.getElementById("view-shopping-lists").hidden = name !== "shopping-lists";
+  document.getElementById("view-shopping-list-detail").hidden = name !== "shopping-list-detail";
 }
 
 /* ---------- Plans views ---------- */
@@ -990,6 +1151,223 @@ document.getElementById("deletePlanBtn").addEventListener("click", async () => {
     await deletePlan(currentPlanId);
     currentPlanId = null;
     showView("plans");
+  }
+});
+
+let planShoppingPreviewItems = [];
+
+function renderShoppingPreview(listElId, items){
+  const ul = document.getElementById(listElId);
+  ul.innerHTML = "";
+  items.forEach(item => {
+    const li = document.createElement("li");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = true;
+    checkbox.id = listElId + "_" + item.id;
+    checkbox.dataset.itemId = item.id;
+    const label = document.createElement("label");
+    label.setAttribute("for", checkbox.id);
+    label.textContent = item.text;
+    if(item.source){
+      const src = document.createElement("span");
+      src.className = "item-source";
+      src.textContent = "från: " + item.source;
+      label.appendChild(src);
+    }
+    li.appendChild(checkbox);
+    li.appendChild(label);
+    ul.appendChild(li);
+  });
+}
+
+function getCheckedPreviewItems(listElId, items){
+  const ul = document.getElementById(listElId);
+  const checkedIds = new Set(
+    Array.from(ul.querySelectorAll("input[type=checkbox]:checked")).map(cb => cb.dataset.itemId)
+  );
+  return items.filter(item => checkedIds.has(item.id));
+}
+
+document.getElementById("planToShoppingListBtn").addEventListener("click", () => {
+  const panel = document.getElementById("planShoppingPanel");
+  panel.hidden = !panel.hidden;
+  if(!panel.hidden){
+    const plan = plansCache.find(p => p.id === currentPlanId);
+    planShoppingPreviewItems = plan ? collectShoppingItemsFromPlan(plan) : [];
+    renderShoppingPreview("planShoppingPreviewList", planShoppingPreviewItems);
+    populateShoppingListSelect(document.getElementById("planShoppingSelect"));
+    document.getElementById("planShoppingStatus").textContent = "";
+  }
+});
+document.getElementById("planShoppingSelect").addEventListener("change", (e) => {
+  document.getElementById("planShoppingNewName").hidden = e.target.value !== "__new__";
+});
+document.getElementById("planShoppingConfirmBtn").addEventListener("click", async () => {
+  const select = document.getElementById("planShoppingSelect");
+  const statusEl = document.getElementById("planShoppingStatus");
+  const btn = document.getElementById("planShoppingConfirmBtn");
+  let listId = select.value;
+  if(!listId){
+    statusEl.className = "status-line err";
+    statusEl.textContent = "Välj eller skapa en inköpslista först.";
+    return;
+  }
+  btn.disabled = true;
+  try{
+    const items = getCheckedPreviewItems("planShoppingPreviewList", planShoppingPreviewItems);
+    if(!items.length){
+      statusEl.className = "status-line err";
+      statusEl.textContent = "Inget markerat att lägga till.";
+      btn.disabled = false;
+      return;
+    }
+    if(listId === "__new__"){
+      const name = document.getElementById("planShoppingNewName").value.trim();
+      if(!name){
+        statusEl.className = "status-line err";
+        statusEl.textContent = "Ange ett namn på inköpslistan.";
+        btn.disabled = false;
+        return;
+      }
+      listId = await createShoppingList(name, items);
+    } else {
+      await appendItemsToShoppingList(listId, items);
+    }
+    statusEl.className = "status-line ok";
+    statusEl.textContent = items.length + " ingredienser tillagda i inköpslistan.";
+    document.getElementById("planShoppingNewName").value = "";
+    document.getElementById("planShoppingNewName").hidden = true;
+    select.value = "";
+  }catch(err){
+    statusEl.className = "status-line err";
+    statusEl.textContent = "Kunde inte lägga till: " + err.message;
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+/* ---------- Shopping lists views ---------- */
+function populateShoppingListSelect(select){
+  const previous = select.value;
+  select.innerHTML = '<option value="">Välj inköpslista…</option>';
+  shoppingListsCache.forEach(l => {
+    const opt = document.createElement("option");
+    opt.value = l.id;
+    opt.textContent = l.name + " (" + (Array.isArray(l.items) ? l.items.length : 0) + ")";
+    select.appendChild(opt);
+  });
+  const newOpt = document.createElement("option");
+  newOpt.value = "__new__";
+  newOpt.textContent = "+ Ny inköpslista…";
+  select.appendChild(newOpt);
+  if(Array.from(select.options).some(o => o.value === previous)) select.value = previous;
+}
+
+function updateShoppingListOptions(){
+  populateShoppingListSelect(document.getElementById("recipeShoppingSelect"));
+  populateShoppingListSelect(document.getElementById("planShoppingSelect"));
+}
+
+function renderShoppingListsOverview(){
+  const container = document.getElementById("shoppingListsContainer");
+  container.className = "grid";
+  container.innerHTML = "";
+  document.getElementById("shoppingListsEmptyState").hidden = shoppingListsCache.length > 0;
+  shoppingListsCache.forEach(l => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "card";
+    card.style.padding = "1rem 0.9rem";
+    card.addEventListener("click", () => {
+      currentShoppingListId = l.id;
+      renderShoppingListDetail(l.id);
+      showView("shopping-list-detail");
+    });
+    const label = document.createElement("div");
+    label.className = "label";
+    label.textContent = l.name;
+    card.appendChild(label);
+    const count = document.createElement("div");
+    count.className = "category";
+    count.textContent = (Array.isArray(l.items) ? l.items.length : 0) + " poster";
+    card.appendChild(count);
+    container.appendChild(card);
+  });
+}
+
+function renderShoppingListDetail(id){
+  const list = shoppingListsCache.find(l => l.id === id);
+  if(!list) return;
+  document.getElementById("shoppingListTitle").textContent = list.name;
+  const ul = document.getElementById("shoppingItemsList");
+  ul.innerHTML = "";
+  const items = Array.isArray(list.items) ? list.items : [];
+  document.getElementById("shoppingItemsEmptyState").hidden = items.length > 0;
+  items.forEach(item => {
+    const li = document.createElement("li");
+    const textWrap = document.createElement("div");
+    textWrap.className = "item-text";
+    textWrap.textContent = item.text;
+    if(item.source){
+      const src = document.createElement("span");
+      src.className = "item-source";
+      src.textContent = "från: " + item.source;
+      textWrap.appendChild(src);
+    }
+    li.appendChild(textWrap);
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.textContent = "Ta bort";
+    removeBtn.addEventListener("click", async () => {
+      await removeShoppingItem(id, item.id);
+    });
+    li.appendChild(removeBtn);
+    ul.appendChild(li);
+  });
+}
+
+document.getElementById("viewShoppingListsBtn").addEventListener("click", () => {
+  renderShoppingListsOverview();
+  showView("shopping-lists");
+});
+document.getElementById("backFromShoppingLists").addEventListener("click", (e) => {
+  e.preventDefault();
+  showView("list");
+});
+document.getElementById("newShoppingListBtn").addEventListener("click", async () => {
+  const name = prompt('Namn på inköpslistan (t.ex. "Veckohandling"):');
+  if(!name || !name.trim()) return;
+  const id = await createShoppingList(name.trim(), []);
+  currentShoppingListId = id;
+  renderShoppingListDetail(id);
+  showView("shopping-list-detail");
+});
+document.getElementById("backFromShoppingListDetail").addEventListener("click", (e) => {
+  e.preventDefault();
+  currentShoppingListId = null;
+  showView("shopping-lists");
+});
+document.getElementById("deleteShoppingListBtn").addEventListener("click", async () => {
+  if(!currentShoppingListId) return;
+  if(confirm("Ta bort den här inköpslistan?")){
+    await deleteShoppingList(currentShoppingListId);
+    currentShoppingListId = null;
+    showView("shopping-lists");
+  }
+});
+document.getElementById("addShoppingItemBtn").addEventListener("click", async () => {
+  const input = document.getElementById("shoppingItemInput");
+  const text = input.value.trim();
+  if(!text || !currentShoppingListId) return;
+  await appendItemsToShoppingList(currentShoppingListId, [{ id: genItemId(), text, source: "" }]);
+  input.value = "";
+  input.focus();
+});
+document.getElementById("shoppingItemInput").addEventListener("keydown", (e) => {
+  if(e.key === "Enter"){
+    e.preventDefault();
+    document.getElementById("addShoppingItemBtn").click();
   }
 });
 
@@ -1656,6 +2034,65 @@ document.getElementById("addToListConfirmBtn").addEventListener("click", async (
     statusEl.textContent = "Tillagt i listan.";
     document.getElementById("addToListNewName").value = "";
     document.getElementById("addToListNewName").hidden = true;
+    select.value = "";
+  }catch(err){
+    statusEl.className = "status-line err";
+    statusEl.textContent = "Kunde inte lägga till: " + err.message;
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+let recipeShoppingPreviewItems = [];
+
+document.getElementById("recipeToShoppingListBtn").addEventListener("click", () => {
+  const panel = document.getElementById("recipeShoppingPanel");
+  panel.hidden = !panel.hidden;
+  if(!panel.hidden){
+    recipeShoppingPreviewItems = currentDetailRecipe ? ingredientsAsShoppingItems(currentDetailRecipe) : [];
+    renderShoppingPreview("recipeShoppingPreviewList", recipeShoppingPreviewItems);
+    populateShoppingListSelect(document.getElementById("recipeShoppingSelect"));
+    document.getElementById("recipeShoppingStatus").textContent = "";
+  }
+});
+document.getElementById("recipeShoppingSelect").addEventListener("change", (e) => {
+  document.getElementById("recipeShoppingNewName").hidden = e.target.value !== "__new__";
+});
+document.getElementById("recipeShoppingConfirmBtn").addEventListener("click", async () => {
+  const select = document.getElementById("recipeShoppingSelect");
+  const statusEl = document.getElementById("recipeShoppingStatus");
+  const btn = document.getElementById("recipeShoppingConfirmBtn");
+  let listId = select.value;
+  if(!listId){
+    statusEl.className = "status-line err";
+    statusEl.textContent = "Välj eller skapa en inköpslista först.";
+    return;
+  }
+  btn.disabled = true;
+  try{
+    const items = getCheckedPreviewItems("recipeShoppingPreviewList", recipeShoppingPreviewItems);
+    if(!items.length){
+      statusEl.className = "status-line err";
+      statusEl.textContent = "Inget markerat att lägga till.";
+      btn.disabled = false;
+      return;
+    }
+    if(listId === "__new__"){
+      const name = document.getElementById("recipeShoppingNewName").value.trim();
+      if(!name){
+        statusEl.className = "status-line err";
+        statusEl.textContent = "Ange ett namn på inköpslistan.";
+        btn.disabled = false;
+        return;
+      }
+      listId = await createShoppingList(name, items);
+    } else {
+      await appendItemsToShoppingList(listId, items);
+    }
+    statusEl.className = "status-line ok";
+    statusEl.textContent = items.length + " ingredienser tillagda i inköpslistan.";
+    document.getElementById("recipeShoppingNewName").value = "";
+    document.getElementById("recipeShoppingNewName").hidden = true;
     select.value = "";
   }catch(err){
     statusEl.className = "status-line err";
