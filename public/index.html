@@ -513,6 +513,9 @@
         </select>
         <input type="text" id="fCategoryNew" placeholder="Namn på ny kategori" style="margin-top:0.5rem;" hidden>
 
+        <label for="fPortions">Antal portioner</label>
+        <input type="text" id="fPortions" placeholder="t.ex. 4 personer">
+
         <label>Bild</label>
         <div class="image-pick-row">
           <img class="preview" id="fImagePreview" alt="" hidden>
@@ -555,6 +558,7 @@
     <img class="detail-image" id="dImage" alt="" hidden>
     <h1 class="detail-title" id="dTitle"></h1>
     <div class="detail-source" id="dCategory" style="font-style:italic;color:var(--copper-dark);"></div>
+    <div class="detail-source" id="dPortions"></div>
     <div class="rating" id="dRating"></div>
     <div class="owner-note" id="dOwnerNote" hidden></div>
     <button class="btn-quiet no-print" id="hideSharedBtn" type="button" style="display:block; margin-bottom:1.2rem;" hidden>Dölj från min lista</button>
@@ -1319,6 +1323,7 @@ function openDetail(id){
 
   document.getElementById("dTitle").textContent = r.title || "Namnlöst recept";
   document.getElementById("dCategory").textContent = r.category || "";
+  document.getElementById("dPortions").textContent = r.portions ? "Portioner: " + r.portions : "";
 
   const isOwner = r.ownerId === currentUser.uid;
   document.getElementById("dOwnerActions").hidden = !isOwner;
@@ -1560,6 +1565,7 @@ function resetAddView(){
   document.getElementById("pickerBlocks").innerHTML = "";
   document.getElementById("fTitle").value = "";
   setCategoryFieldValue("");
+  document.getElementById("fPortions").value = "";
   document.getElementById("fImageUrl").value = "";
   document.getElementById("fImageFile").value = "";
   document.getElementById("fImagePreview").hidden = true;
@@ -1583,6 +1589,7 @@ function openEditor(id){
 
   document.getElementById("fTitle").value = r.title || "";
   setCategoryFieldValue(r.category || "");
+  document.getElementById("fPortions").value = r.portions || "";
   document.getElementById("fIngredients").value = Array.isArray(r.ingredients) ? r.ingredients.join("\n") : "";
   document.getElementById("fInstructions").value = r.instructions || "";
   fetchedSourceUrl = r.sourceUrl || "";
@@ -1673,6 +1680,12 @@ function firstImageUrl(image, base){
   return "";
 }
 
+function normalizeYield(yieldValue){
+  if(!yieldValue) return "";
+  if(Array.isArray(yieldValue)) return normalizeYield(yieldValue[0]);
+  return String(yieldValue).trim();
+}
+
 function findRecipeInJsonLd(doc, baseUrl){
   const scripts = Array.from(doc.querySelectorAll('script[type="application/ld+json"]'));
   for(const script of scripts){
@@ -1702,7 +1715,8 @@ function findRecipeInJsonLd(doc, baseUrl){
         description: (recipe.description || "").trim(),
         category: Array.isArray(recipe.recipeCategory)
           ? (recipe.recipeCategory[0] || "").trim()
-          : (recipe.recipeCategory || "").trim()
+          : (recipe.recipeCategory || "").trim(),
+        portions: normalizeYield(recipe.recipeYield)
       };
     }
   }
@@ -1758,6 +1772,7 @@ document.getElementById("fetchBtn").addEventListener("click", async () => {
     if(recipe && (recipe.title || recipe.ingredients.length || recipe.instructions)){
       document.getElementById("fTitle").value = recipe.title || (doc.querySelector("title")?.textContent.trim() || "");
       setCategoryFieldValue(recipe.category || "");
+      document.getElementById("fPortions").value = recipe.portions || "";
       document.getElementById("fIngredients").value = recipe.ingredients.join("\n");
       document.getElementById("fInstructions").value = recipe.instructions || recipe.description || "";
 
@@ -1930,6 +1945,7 @@ document.getElementById("recipeForm").addEventListener("submit", async (e) => {
     .split("\n").map(s => s.trim()).filter(Boolean);
   const instructions = document.getElementById("fInstructions").value.trim();
   const imageUrl = document.getElementById("fImageUrl").value.trim();
+  const portions = document.getElementById("fPortions").value.trim();
 
   const image = chosenImageDataUrl || imageUrl || "";
 
@@ -1937,6 +1953,7 @@ document.getElementById("recipeForm").addEventListener("submit", async (e) => {
     const payload = {
       title,
       category,
+      portions,
       image,
       ingredients,
       instructions,
