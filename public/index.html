@@ -271,6 +271,17 @@
   .detail-title{ font-size: 1.7rem; font-style: italic; margin-bottom: 0.3rem; }
   .detail-source{ font-size: 0.85rem; color: var(--ink-soft); margin-bottom: 1.4rem; }
   .detail-source a{ color: var(--ink-soft); }
+  .portion-scaler{
+    display:flex; align-items:center; gap:0.5rem; flex-wrap: wrap;
+    font-size: 0.9rem; color: var(--ink-soft);
+    margin-bottom: 1.4rem;
+  }
+  .portion-scaler button.btn-outline{
+    padding: 0.2rem 0.6rem; line-height: 1;
+  }
+  .portion-scaler input[type=number]{
+    width: 56px; text-align:center; padding: 0.3rem;
+  }
   .detail-section{ margin-bottom: 1.6rem; }
   .detail-section h3{
     font-size: 0.85rem; text-transform: none; letter-spacing: 0.2px;
@@ -559,6 +570,14 @@
     <h1 class="detail-title" id="dTitle"></h1>
     <div class="detail-source" id="dCategory" style="font-style:italic;color:var(--copper-dark);"></div>
     <div class="detail-source" id="dPortions"></div>
+    <div class="portion-scaler no-print" id="portionScaler" hidden>
+      <span>Räkna om för:</span>
+      <button type="button" class="btn-outline" id="scaleDownBtn">−</button>
+      <input type="number" id="scaleInput" min="1" step="1">
+      <span>portioner</span>
+      <button type="button" class="btn-outline" id="scaleUpBtn">+</button>
+      <button type="button" class="btn-quiet" id="scaleResetBtn">Återställ</button>
+    </div>
     <div class="rating" id="dRating"></div>
     <div class="owner-note" id="dOwnerNote" hidden></div>
     <button class="btn-quiet no-print" id="hideSharedBtn" type="button" style="display:block; margin-bottom:1.2rem;" hidden>Dölj från min lista</button>
@@ -1317,6 +1336,7 @@ function openDetail(id){
   const r = recipesCache.find(x => x.id === id);
   if(!r) return;
   currentDetailId = id;
+  currentDetailRecipe = r;
 
   const img = document.getElementById("dImage");
   if(r.image){ img.src = r.image; img.hidden = false; } else { img.hidden = true; }
@@ -1324,6 +1344,15 @@ function openDetail(id){
   document.getElementById("dTitle").textContent = r.title || "Namnlöst recept";
   document.getElementById("dCategory").textContent = r.category || "";
   document.getElementById("dPortions").textContent = r.portions ? "Portioner: " + r.portions : "";
+
+  currentBasePortions = extractPortionsNumber(r.portions);
+  const scaler = document.getElementById("portionScaler");
+  if(currentBasePortions){
+    scaler.hidden = false;
+    document.getElementById("scaleInput").value = currentBasePortions;
+  } else {
+    scaler.hidden = true;
+  }
 
   const isOwner = r.ownerId === currentUser.uid;
   document.getElementById("dOwnerActions").hidden = !isOwner;
@@ -1350,20 +1379,7 @@ function openDetail(id){
     srcEl.textContent = "";
   }
 
-  const ingWrap = document.getElementById("dIngredientsWrap");
-  const ingEl = document.getElementById("dIngredients");
-  ingEl.innerHTML = "";
-  const ingredients = Array.isArray(r.ingredients) ? r.ingredients : [];
-  if(ingredients.length){
-    ingredients.forEach(line => {
-      const li = document.createElement("li");
-      li.textContent = line;
-      ingEl.appendChild(li);
-    });
-    ingWrap.hidden = false;
-  } else {
-    ingWrap.hidden = true;
-  }
+  renderIngredientsList(r, 1);
 
   const instrWrap = document.getElementById("dInstructionsWrap");
   const instrEl = document.getElementById("dInstructions");
@@ -1376,6 +1392,130 @@ function openDetail(id){
 
   showView("detail");
 }
+
+/* ---------- Portionsskalning ---------- */
+let currentDetailRecipe = null;
+let currentBasePortions = null;
+
+const FRACTION_CHAR_MAP = {
+  "½": 0.5, "¼": 0.25, "¾": 0.75, "⅓": 1/3, "⅔": 2/3,
+  "⅛": 0.125, "⅜": 0.375, "⅝": 0.625, "⅞": 0.875
+};
+
+function extractPortionsNumber(portionsStr){
+  if(!portionsStr) return null;
+  const match = String(portionsStr).match(/\d+/);
+  return match ? parseInt(match[0], 10) : null;
+}
+
+function parseLeadingQuantity(line){
+  const trimmed = line.replace(/^\s+/, "");
+  const prefix = line.slice(0, line.length - trimmed.length);
+
+  let m = trimmed.match(/^(\d+)\s+(\d+)\/(\d+)(\s*)/);
+  if(m){
+    const value = parseInt(m[1], 10) + parseInt(m[2], 10) / parseInt(m[3], 10);
+    return { value, rest: trimmed.slice(m[0].length), prefix };
+  }
+  m = trimmed.match(/^(\d+)\/(\d+)(\s*)/);
+  if(m){
+    const value = parseInt(m[1], 10) / parseInt(m[2], 10);
+    return { value, rest: trimmed.slice(m[0].length), prefix };
+  }
+  m = trimmed.match(/^(\d+)[.,](\d+)(\s*)/);
+  if(m){
+    const value = parseFloat(m[1] + "." + m[2]);
+    return { value, rest: trimmed.slice(m[0].length), prefix };
+  }
+  m = trimmed.match(/^(\d+)(\s*)/);
+  if(m){
+    const value = parseInt(m[1], 10);
+    return { value, rest: trimmed.slice(m[0].length), prefix };
+  }
+  m = trimmed.match(/^([½¼¾⅓⅔⅛⅜⅝⅞])(\s*)/);
+  if(m){
+    const value = FRACTION_CHAR_MAP[m[1]];
+    return { value, rest: trimmed.slice(m[0].length), prefix };
+  }
+  return null;
+}
+
+function formatQuantity(value){
+  if(value <= 0) return "0";
+  const rounded = Math.round(value * 100) / 100;
+  const intPart = Math.floor(rounded);
+  const frac = rounded - intPart;
+
+  const fracTable = [
+    [0.125, "⅛"], [0.25, "¼"], [1/3, "⅓"], [0.375, "⅜"],
+    [0.5, "½"], [0.625, "⅝"], [2/3, "⅔"], [0.75, "¾"], [0.875, "⅞"]
+  ];
+  for(const [dec, sym] of fracTable){
+    if(Math.abs(frac - dec) < 0.04){
+      return (intPart > 0 ? intPart + " " : "") + sym;
+    }
+  }
+  if(frac < 0.04){
+    return String(intPart);
+  }
+  let decimalStr = rounded.toFixed(1).replace(".", ",");
+  if(decimalStr.endsWith(",0")) decimalStr = decimalStr.slice(0, -2);
+  return decimalStr;
+}
+
+function scaleIngredientLine(line, factor){
+  if(factor === 1) return line;
+  const parsed = parseLeadingQuantity(line);
+  if(!parsed) return line;
+  const scaled = parsed.value * factor;
+  return parsed.prefix + formatQuantity(scaled) + " " + parsed.rest;
+}
+
+function renderIngredientsList(recipe, factor){
+  const ingWrap = document.getElementById("dIngredientsWrap");
+  const ingEl = document.getElementById("dIngredients");
+  ingEl.innerHTML = "";
+  const ingredients = Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
+  if(ingredients.length){
+    ingredients.forEach(line => {
+      const li = document.createElement("li");
+      li.textContent = scaleIngredientLine(line, factor);
+      ingEl.appendChild(li);
+    });
+    ingWrap.hidden = false;
+  } else {
+    ingWrap.hidden = true;
+  }
+}
+
+function applyScaleFromInput(){
+  const input = document.getElementById("scaleInput");
+  let val = parseInt(input.value, 10);
+  if(!val || val < 1){
+    val = currentBasePortions;
+    input.value = val;
+  }
+  const factor = val / currentBasePortions;
+  renderIngredientsList(currentDetailRecipe, factor);
+}
+
+document.getElementById("scaleInput").addEventListener("input", applyScaleFromInput);
+document.getElementById("scaleDownBtn").addEventListener("click", () => {
+  const input = document.getElementById("scaleInput");
+  const val = Math.max(1, (parseInt(input.value, 10) || currentBasePortions) - 1);
+  input.value = val;
+  applyScaleFromInput();
+});
+document.getElementById("scaleUpBtn").addEventListener("click", () => {
+  const input = document.getElementById("scaleInput");
+  const val = (parseInt(input.value, 10) || currentBasePortions) + 1;
+  input.value = val;
+  applyScaleFromInput();
+});
+document.getElementById("scaleResetBtn").addEventListener("click", () => {
+  document.getElementById("scaleInput").value = currentBasePortions;
+  applyScaleFromInput();
+});
 
 document.getElementById("deleteBtn").addEventListener("click", async () => {
   if(!currentDetailId) return;
