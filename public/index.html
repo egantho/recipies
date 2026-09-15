@@ -113,6 +113,10 @@
     font-size: 0.82rem; color: var(--copper-dark);
     text-decoration: underline; text-underline-offset: 2px; white-space: nowrap;
   }
+  .category-subheading{
+    font-size: 0.92rem; font-style: italic; color: var(--ink-soft);
+    margin: 0 0 0.6rem 0.2rem;
+  }
   .btn-primary{
     background: var(--copper);
     color: #fff;
@@ -517,13 +521,10 @@
         <label for="fTitle">Titel</label>
         <input type="text" id="fTitle" required>
 
-        <label for="fCategorySelect">Kategori</label>
-        <select id="fCategorySelect">
-          <option value="">Ingen kategori</option>
-          <option value="__new__">+ Ny kategori…</option>
-        </select>
-        <input type="text" id="fCategoryNew" placeholder="t.ex. Bakverk eller Bakverk/Bullar" style="margin-top:0.5rem;" hidden>
-        <p class="hint" id="fCategoryHint" style="margin-top:0.3rem;" hidden>Skriv "Huvudkategori/Underkategori" för att skapa en underkategori, t.ex. "Bakverk/Bullar".</p>
+        <label for="fCategoryText">Kategori(er)</label>
+        <input type="text" id="fCategoryText" list="categoryDatalist" placeholder="t.ex. Bakverk/Bullar; Fika">
+        <datalist id="categoryDatalist"></datalist>
+        <p class="hint" style="margin-top:0.3rem;">Flera kategorier avskiljs med semikolon ( ; ), t.ex. "Bakverk/Bullar; Fika". Skriv "Huvudkategori/Underkategori" för en underkategori.</p>
 
         <label for="fPortions">Antal portioner</label>
         <input type="text" id="fPortions" placeholder="t.ex. 4 personer">
@@ -1008,15 +1009,25 @@ function categoryDisplay(cat){
   return (cat || "").split("/").map(s => s.trim()).filter(Boolean).join(" › ");
 }
 
+function categoryDisplayFull(catString){
+  return getCategoryEntries(catString).map(categoryDisplay).join(", ");
+}
+
 function categoryTopLevel(cat){
   const parts = (cat || "").split("/");
   return (parts[0] || "").trim();
 }
 
+function getCategoryEntries(catString){
+  return (catString || "").split(";").map(s => s.trim()).filter(Boolean);
+}
+
 function updateCategoryOptions(){
-  const categories = Array.from(new Set(
-    recipesCache.map(r => (r.category || "").trim()).filter(Boolean)
-  )).sort((a, b) => a.localeCompare(b, "sv"));
+  const allEntries = new Set();
+  recipesCache.forEach(r => {
+    getCategoryEntries(r.category).forEach(entry => allEntries.add(entry));
+  });
+  const categories = Array.from(allEntries).sort((a, b) => a.localeCompare(b, "sv"));
 
   const filterSelect = document.getElementById("categoryFilter");
   const previousValue = filterSelect.value;
@@ -1029,64 +1040,18 @@ function updateCategoryOptions(){
   });
   if(categories.includes(previousValue)) filterSelect.value = previousValue;
 
-  const formSelect = document.getElementById("fCategorySelect");
-  const previousFormValue = formSelect.value;
-  formSelect.innerHTML = '<option value="">Ingen kategori</option>';
+  const datalist = document.getElementById("categoryDatalist");
+  datalist.innerHTML = "";
   categories.forEach(cat => {
     const opt = document.createElement("option");
     opt.value = cat;
-    opt.textContent = categoryDisplay(cat);
-    formSelect.appendChild(opt);
+    datalist.appendChild(opt);
   });
-  const newOpt = document.createElement("option");
-  newOpt.value = "__new__";
-  newOpt.textContent = "+ Ny kategori…";
-  formSelect.appendChild(newOpt);
-  if(categories.includes(previousFormValue) || previousFormValue === "" || previousFormValue === "__new__"){
-    formSelect.value = previousFormValue;
-  }
 }
 
 function setCategoryFieldValue(cat){
-  const formSelect = document.getElementById("fCategorySelect");
-  const newInput = document.getElementById("fCategoryNew");
-  const hint = document.getElementById("fCategoryHint");
-  cat = (cat || "").trim();
-  if(!cat){
-    formSelect.value = "";
-    newInput.hidden = true;
-    newInput.value = "";
-    hint.hidden = true;
-    return;
-  }
-  const optionExists = Array.from(formSelect.options).some(o => o.value === cat);
-  if(optionExists){
-    formSelect.value = cat;
-    newInput.hidden = true;
-    newInput.value = "";
-    hint.hidden = true;
-  } else {
-    formSelect.value = "__new__";
-    newInput.hidden = false;
-    newInput.value = cat;
-    hint.hidden = false;
-  }
+  document.getElementById("fCategoryText").value = cat || "";
 }
-
-document.getElementById("fCategorySelect").addEventListener("change", (e) => {
-  const newInput = document.getElementById("fCategoryNew");
-  const hint = document.getElementById("fCategoryHint");
-  if(e.target.value === "__new__"){
-    newInput.hidden = false;
-    newInput.value = "";
-    newInput.focus();
-    hint.hidden = false;
-  } else {
-    newInput.hidden = true;
-    newInput.value = "";
-    hint.hidden = true;
-  }
-});
 
 let selectionModeActive = false;
 let selectedRecipeIds = new Set();
@@ -1129,7 +1094,7 @@ function buildCard(r){
   if(r.category){
     const catLabel = document.createElement("div");
     catLabel.className = "category";
-    catLabel.textContent = categoryDisplay(r.category);
+    catLabel.textContent = categoryDisplayFull(r.category);
     card.appendChild(catLabel);
   }
   if(r.rating > 0){
@@ -1257,8 +1222,6 @@ function sortRecipes(list, mode){
   return sorted;
 }
 
-const RECIPES_PER_CATEGORY_PREVIEW = 6;
-
 function jumpToCategory(cat){
   document.getElementById("categoryFilter").value = cat;
   if(!document.getElementById("sortMode").value){
@@ -1283,7 +1246,7 @@ function renderGrid(){
     if(Array.isArray(r.ingredients) && r.ingredients.some(i => i.toLowerCase().includes(q))) return true;
     return false;
   };
-  const matchesCategory = r => !cat || (r.category || "").toLowerCase().includes(cat.toLowerCase());
+  const matchesCategory = r => !cat || getCategoryEntries(r.category).some(entry => entry.toLowerCase().includes(cat.toLowerCase()));
 
   const useGrouped = mode === "" && !q && !cat;
 
@@ -1303,47 +1266,92 @@ function renderGrid(){
   container.appendChild(grid);
 }
 
+const RECIPES_PER_SUBGROUP_PREVIEW = 4;
+
+function buildCategoryTree(){
+  const tree = new Map(); // Map<topLevel, Map<subLabel, recipe[]>>
+  recipesCache.forEach(r => {
+    const entries = getCategoryEntries(r.category);
+    const effectiveEntries = entries.length ? entries : ["Okategoriserat"];
+    effectiveEntries.forEach(entry => {
+      const parts = entry.split("/").map(s => s.trim()).filter(Boolean);
+      const top = parts[0] || "Okategoriserat";
+      const sub = parts.slice(1).join(" / ");
+      if(!tree.has(top)) tree.set(top, new Map());
+      const subMap = tree.get(top);
+      if(!subMap.has(sub)) subMap.set(sub, []);
+      const list = subMap.get(sub);
+      if(!list.some(x => x.id === r.id)) list.push(r);
+    });
+  });
+  return tree;
+}
+
 function renderGroupedByCategory(container){
   container.innerHTML = "";
 
-  const groups = new Map();
-  recipesCache.forEach(r => {
-    const cat = (r.category || "").trim();
-    const topLevel = cat ? categoryTopLevel(cat) : "Okategoriserat";
-    if(!groups.has(topLevel)) groups.set(topLevel, []);
-    groups.get(topLevel).push(r);
-  });
+  const tree = buildCategoryTree();
 
-  const categoryNames = Array.from(groups.keys()).sort((a, b) => {
+  const topNames = Array.from(tree.keys()).sort((a, b) => {
     if(a === "Okategoriserat") return 1;
     if(b === "Okategoriserat") return -1;
     return a.localeCompare(b, "sv");
   });
 
-  categoryNames.forEach(catName => {
-    const recipesInCat = sortRecipes(groups.get(catName), "date-desc");
+  topNames.forEach(topName => {
+    const subMap = tree.get(topName);
+    const allIds = new Set();
+    subMap.forEach(list => list.forEach(r => allIds.add(r.id)));
+
     const section = document.createElement("div");
     section.className = "category-section";
 
     const heading = document.createElement("div");
     heading.className = "category-section-heading";
     const h2 = document.createElement("h2");
-    h2.textContent = catName + " (" + recipesInCat.length + ")";
+    h2.textContent = topName + " (" + allIds.size + ")";
     heading.appendChild(h2);
 
-    if(recipesInCat.length > RECIPES_PER_CATEGORY_PREVIEW){
+    if(allIds.size > RECIPES_PER_SUBGROUP_PREVIEW){
       const showAllBtn = document.createElement("button");
       showAllBtn.type = "button";
       showAllBtn.textContent = "Visa alla →";
-      showAllBtn.addEventListener("click", () => jumpToCategory(catName === "Okategoriserat" ? "" : catName));
+      showAllBtn.addEventListener("click", () => jumpToCategory(topName === "Okategoriserat" ? "" : topName));
       heading.appendChild(showAllBtn);
     }
     section.appendChild(heading);
 
-    const grid = document.createElement("div");
-    grid.className = "grid";
-    recipesInCat.slice(0, RECIPES_PER_CATEGORY_PREVIEW).forEach(r => grid.appendChild(buildCard(r)));
-    section.appendChild(grid);
+    const subNames = Array.from(subMap.keys()).sort((a, b) => {
+      if(a === "") return -1;
+      if(b === "") return 1;
+      return a.localeCompare(b, "sv");
+    });
+
+    subNames.forEach(subName => {
+      const recipesInSub = sortRecipes(subMap.get(subName), "date-desc");
+
+      if(subName){
+        const subHeading = document.createElement("h3");
+        subHeading.className = "category-subheading";
+        subHeading.textContent = subName + " (" + recipesInSub.length + ")";
+        section.appendChild(subHeading);
+      }
+
+      const grid = document.createElement("div");
+      grid.className = "grid";
+      recipesInSub.slice(0, RECIPES_PER_SUBGROUP_PREVIEW).forEach(r => grid.appendChild(buildCard(r)));
+      section.appendChild(grid);
+
+      if(recipesInSub.length > RECIPES_PER_SUBGROUP_PREVIEW){
+        const moreBtn = document.createElement("button");
+        moreBtn.type = "button";
+        moreBtn.className = "btn-quiet";
+        moreBtn.style.cssText = "display:block;margin:-0.5rem 0 1.2rem;font-size:0.8rem;";
+        moreBtn.textContent = "Visa alla i " + (subName ? topName + " › " + subName : topName) + " →";
+        moreBtn.addEventListener("click", () => jumpToCategory(subName ? topName + "/" + subName : topName));
+        section.appendChild(moreBtn);
+      }
+    });
 
     container.appendChild(section);
   });
@@ -1360,7 +1368,7 @@ function openDetail(id){
   if(r.image){ img.src = r.image; img.hidden = false; } else { img.hidden = true; }
 
   document.getElementById("dTitle").textContent = r.title || "Namnlöst recept";
-  document.getElementById("dCategory").textContent = categoryDisplay(r.category);
+  document.getElementById("dCategory").textContent = categoryDisplayFull(r.category);
   document.getElementById("dPortions").textContent = r.portions ? "Portioner: " + r.portions : "";
 
   currentBasePortions = extractPortionsNumber(r.portions);
@@ -1872,7 +1880,7 @@ function findRecipeInJsonLd(doc, baseUrl){
         instructions: flattenInstructions(recipe.recipeInstructions),
         description: (recipe.description || "").trim(),
         category: Array.isArray(recipe.recipeCategory)
-          ? (recipe.recipeCategory[0] || "").trim()
+          ? recipe.recipeCategory.map(s => s.trim()).filter(Boolean).join("; ")
           : (recipe.recipeCategory || "").trim(),
         portions: normalizeYield(recipe.recipeYield)
       };
@@ -2083,15 +2091,12 @@ document.getElementById("recipeForm").addEventListener("submit", async (e) => {
   const saveBtn = document.getElementById("saveBtn");
 
   const title = document.getElementById("fTitle").value.trim();
-  const categorySelectValue = document.getElementById("fCategorySelect").value;
-  const category = categorySelectValue === "__new__"
-    ? document.getElementById("fCategoryNew").value.trim()
-    : categorySelectValue.trim();
+  const category = document.getElementById("fCategoryText").value.trim();
 
   if(!category){
     const proceed = confirm("Du har inte angett någon kategori för receptet. Vill du spara ändå?");
     if(!proceed){
-      document.getElementById("fCategorySelect").focus();
+      document.getElementById("fCategoryText").focus();
       return;
     }
   }
