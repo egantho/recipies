@@ -98,6 +98,9 @@
   .toolbar select{
     flex: 0 1 170px;
   }
+  .toolbar-actions{
+    display:flex; gap:0.7rem; flex-wrap: wrap;
+  }
   .category-section{ margin-bottom: 2.2rem; }
   .category-section-heading{
     display:flex; justify-content:space-between; align-items:baseline;
@@ -419,9 +422,11 @@
         <option value="alpha-asc">Bokstavsordning: A-Ö</option>
         <option value="alpha-desc">Bokstavsordning: Ö-A</option>
       </select>
-      <button class="btn-outline" id="viewPlansBtn" type="button">Mina listor</button>
-      <button class="btn-outline" id="selectModeBtn" type="button">Välj recept</button>
-      <button class="btn-primary" id="newRecipeBtn" type="button" disabled>Ansluter…</button>
+      <div class="toolbar-actions">
+        <button class="btn-outline" id="viewPlansBtn" type="button">Mina listor</button>
+        <button class="btn-outline" id="selectModeBtn" type="button">Välj recept</button>
+        <button class="btn-primary" id="newRecipeBtn" type="button" disabled>Ansluter…</button>
+      </div>
     </div>
     <div class="panel selection-bar" id="selectionBar" hidden>
       <span id="selectionCount"></span>
