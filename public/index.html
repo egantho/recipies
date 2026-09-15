@@ -98,6 +98,18 @@
   .toolbar select{
     flex: 0 1 170px;
   }
+  .category-section{ margin-bottom: 2.2rem; }
+  .category-section-heading{
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin-bottom: 0.7rem; border-bottom: 1px solid var(--line); padding-bottom: 0.4rem;
+  }
+  .category-section-heading h2{
+    font-size: 1.15rem; font-style: italic; font-weight: 600;
+  }
+  .category-section-heading button{
+    font-size: 0.82rem; color: var(--copper-dark);
+    text-decoration: underline; text-underline-offset: 2px; white-space: nowrap;
+  }
   .btn-primary{
     background: var(--copper);
     color: #fff;
@@ -270,6 +282,31 @@
     font-size: 0.85rem; color: var(--ink-soft); font-style: italic;
     margin-bottom: 1.2rem;
   }
+  .rating{
+    margin-bottom: 1.2rem;
+    font-size: 1.4rem;
+    letter-spacing: 0.1rem;
+    line-height: 1;
+  }
+  .rating .star{
+    color: var(--line);
+  }
+  .rating .star.filled{
+    color: var(--copper);
+  }
+  .rating.interactive .star{
+    cursor: pointer;
+  }
+  .rating-clear{
+    display:block; font-size: 0.78rem; color: var(--ink-soft);
+    text-decoration: underline; margin-top: 0.2rem;
+  }
+  .card .rating-badge{
+    padding: 0 0.7rem 0.7rem;
+    font-size: 0.75rem;
+    color: var(--copper);
+    letter-spacing: 0.05rem;
+  }
   .share-panel{ margin-top: 2rem; }
   .share-panel h3{
     font-size: 0.85rem; color: var(--copper-dark); margin-bottom: 0.6rem;
@@ -346,13 +383,22 @@
   <!-- LIST VIEW -->
   <section id="view-list" hidden>
     <div class="toolbar">
-      <input type="search" id="searchInput" placeholder="Sök bland dina recept…">
+      <input type="search" id="searchInput" placeholder="Sök i titel, ingredienser eller beskrivning…">
       <select id="categoryFilter">
         <option value="">Alla kategorier</option>
       </select>
+      <select id="sortMode">
+        <option value="">Grupperat per kategori</option>
+        <option value="date-desc">Datum: senast först</option>
+        <option value="date-asc">Datum: äldst först</option>
+        <option value="alpha-asc">Bokstavsordning: A-Ö</option>
+        <option value="alpha-desc">Bokstavsordning: Ö-A</option>
+      </select>
       <button class="btn-primary" id="newRecipeBtn" type="button" disabled>Ansluter…</button>
     </div>
-    <div class="grid" id="recipeGrid"></div>
+    <div id="recipeContainer">
+      <div class="grid" id="recipeGrid"></div>
+    </div>
     <div class="empty-state" id="emptyState" hidden>
       <p>Inga recept sparade än.</p>
       <p>Klicka på <em>+ Nytt recept</em> för att lägga till det första.</p>
@@ -426,7 +472,9 @@
     <img class="detail-image" id="dImage" alt="" hidden>
     <h1 class="detail-title" id="dTitle"></h1>
     <div class="detail-source" id="dCategory" style="font-style:italic;color:var(--copper-dark);"></div>
+    <div class="rating" id="dRating"></div>
     <div class="owner-note" id="dOwnerNote" hidden></div>
+    <button class="btn-quiet" id="hideSharedBtn" type="button" style="display:block; margin-bottom:1.2rem;" hidden>Dölj från min lista</button>
     <div class="detail-source" id="dSource"></div>
 
     <div class="detail-section" id="dIngredientsWrap">
@@ -557,14 +605,17 @@ auth.onAuthStateChanged(user => {
     newBtn.disabled = false;
     newBtn.textContent = "+ Nytt recept";
     subscribeToRecipes();
+    subscribeToPrefs();
     showView("list");
   } else {
     currentUser = null;
     ownedRecipes = [];
     sharedRecipes = [];
     recipesCache = [];
+    hiddenSharedIds = [];
     if(unsubscribeOwned){ unsubscribeOwned(); unsubscribeOwned = null; }
     if(unsubscribeShared){ unsubscribeShared(); unsubscribeShared = null; }
+    if(unsubscribePrefs){ unsubscribePrefs(); unsubscribePrefs = null; }
     document.getElementById("accountBar").hidden = true;
     showView("login");
   }
@@ -575,10 +626,31 @@ function recipesCollection(){
   return db.collection("recipes");
 }
 
+let hiddenSharedIds = [];
+let unsubscribePrefs = null;
+
+function subscribeToPrefs(){
+  if(unsubscribePrefs) unsubscribePrefs();
+  unsubscribePrefs = db.collection("userPrefs").doc(currentUser.uid)
+    .onSnapshot(doc => {
+      const data = doc.data();
+      hiddenSharedIds = (data && Array.isArray(data.hiddenShared)) ? data.hiddenShared : [];
+      mergeAndRender();
+    }, err => console.error(err));
+}
+
+async function hideSharedRecipe(id){
+  await db.collection("userPrefs").doc(currentUser.uid).set({
+    hiddenShared: firebase.firestore.FieldValue.arrayUnion(id)
+  }, { merge: true });
+}
+
 function mergeAndRender(){
   const merged = new Map();
   ownedRecipes.forEach(r => merged.set(r.id, r));
-  sharedRecipes.forEach(r => { if(!merged.has(r.id)) merged.set(r.id, r); });
+  sharedRecipes.forEach(r => {
+    if(!merged.has(r.id) && !hiddenSharedIds.includes(r.id)) merged.set(r.id, r);
+  });
   recipesCache = Array.from(merged.values()).sort((a, b) => {
     const at = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
     const bt = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
@@ -634,6 +706,10 @@ async function deleteRecipe(id){
   await recipesCollection().doc(id).delete();
 }
 
+async function setRating(id, value){
+  await recipesCollection().doc(id).update({ rating: value });
+}
+
 async function addShare(id, email){
   await recipesCollection().doc(id).update({
     sharedWith: firebase.firestore.FieldValue.arrayUnion(email.toLowerCase().trim())
@@ -672,6 +748,16 @@ document.getElementById("backFromDetail").addEventListener("click", e => {
 /* ---------- List / grid ---------- */
 document.getElementById("searchInput").addEventListener("input", renderGrid);
 document.getElementById("categoryFilter").addEventListener("change", renderGrid);
+document.getElementById("sortMode").addEventListener("change", () => {
+  localStorage.setItem("receptladan_sortmode", document.getElementById("sortMode").value);
+  renderGrid();
+});
+(function initSortMode(){
+  const saved = localStorage.getItem("receptladan_sortmode");
+  if(saved !== null){
+    document.getElementById("sortMode").value = saved;
+  }
+})();
 
 function updateCategoryOptions(){
   const categories = Array.from(new Set(
@@ -741,47 +827,151 @@ document.getElementById("fCategorySelect").addEventListener("change", (e) => {
   }
 });
 
+function buildCard(r){
+  const card = document.createElement("button");
+  card.className = "card";
+  card.type = "button";
+  card.addEventListener("click", () => openDetail(r.id));
+
+  if(r.image){
+    const img = document.createElement("img");
+    img.className = "thumb";
+    img.src = r.image;
+    img.alt = "";
+    card.appendChild(img);
+  } else {
+    const ph = document.createElement("div");
+    ph.className = "thumb placeholder";
+    ph.textContent = "Ingen bild";
+    card.appendChild(ph);
+  }
+  const label = document.createElement("div");
+  label.className = "label";
+  label.textContent = r.title || "Namnlöst recept";
+  card.appendChild(label);
+  if(r.category){
+    const catLabel = document.createElement("div");
+    catLabel.className = "category";
+    catLabel.textContent = r.category;
+    card.appendChild(catLabel);
+  }
+  if(r.rating > 0){
+    const ratingBadge = document.createElement("div");
+    ratingBadge.className = "rating-badge";
+    ratingBadge.textContent = "★".repeat(r.rating) + "☆".repeat(5 - r.rating);
+    card.appendChild(ratingBadge);
+  }
+  return card;
+}
+
+function sortRecipes(list, mode){
+  const sorted = list.slice();
+  const millis = r => (r.createdAt && r.createdAt.toMillis) ? r.createdAt.toMillis() : 0;
+  switch(mode){
+    case "date-asc":
+      sorted.sort((a, b) => millis(a) - millis(b));
+      break;
+    case "alpha-asc":
+      sorted.sort((a, b) => (a.title || "").localeCompare(b.title || "", "sv"));
+      break;
+    case "alpha-desc":
+      sorted.sort((a, b) => (b.title || "").localeCompare(a.title || "", "sv"));
+      break;
+    case "date-desc":
+    default:
+      sorted.sort((a, b) => millis(b) - millis(a));
+  }
+  return sorted;
+}
+
+const RECIPES_PER_CATEGORY_PREVIEW = 6;
+
+function jumpToCategory(cat){
+  document.getElementById("categoryFilter").value = cat;
+  if(!document.getElementById("sortMode").value){
+    document.getElementById("sortMode").value = "date-desc";
+  }
+  renderGrid();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 function renderGrid(){
   const q = document.getElementById("searchInput").value.trim().toLowerCase();
   const cat = document.getElementById("categoryFilter").value;
-  const grid = document.getElementById("recipeGrid");
-  const filtered = recipesCache.filter(r => {
-    const matchesQuery = !q || (r.title || "").toLowerCase().includes(q);
-    const matchesCategory = !cat || (r.category || "").toLowerCase().includes(cat.toLowerCase());
-    return matchesQuery && matchesCategory;
-  });
-  grid.innerHTML = "";
+  const mode = document.getElementById("sortMode").value;
+  const container = document.getElementById("recipeContainer");
+
   document.getElementById("emptyState").hidden = recipesCache.length > 0;
 
-  filtered.forEach(r => {
-    const card = document.createElement("button");
-    card.className = "card";
-    card.type = "button";
-    card.addEventListener("click", () => openDetail(r.id));
+  const matchesQuery = r => {
+    if(!q) return true;
+    if((r.title || "").toLowerCase().includes(q)) return true;
+    if((r.instructions || "").toLowerCase().includes(q)) return true;
+    if(Array.isArray(r.ingredients) && r.ingredients.some(i => i.toLowerCase().includes(q))) return true;
+    return false;
+  };
+  const matchesCategory = r => !cat || (r.category || "").toLowerCase().includes(cat.toLowerCase());
 
-    if(r.image){
-      const img = document.createElement("img");
-      img.className = "thumb";
-      img.src = r.image;
-      img.alt = "";
-      card.appendChild(img);
-    } else {
-      const ph = document.createElement("div");
-      ph.className = "thumb placeholder";
-      ph.textContent = "Ingen bild";
-      card.appendChild(ph);
+  const useGrouped = mode === "" && !q && !cat;
+
+  if(useGrouped){
+    renderGroupedByCategory(container);
+    return;
+  }
+
+  const filtered = recipesCache.filter(r => matchesQuery(r) && matchesCategory(r));
+  const sorted = sortRecipes(filtered, mode || "date-desc");
+
+  container.innerHTML = "";
+  const grid = document.createElement("div");
+  grid.className = "grid";
+  grid.id = "recipeGrid";
+  sorted.forEach(r => grid.appendChild(buildCard(r)));
+  container.appendChild(grid);
+}
+
+function renderGroupedByCategory(container){
+  container.innerHTML = "";
+
+  const groups = new Map();
+  recipesCache.forEach(r => {
+    const cat = (r.category || "").trim() || "Okategoriserat";
+    if(!groups.has(cat)) groups.set(cat, []);
+    groups.get(cat).push(r);
+  });
+
+  const categoryNames = Array.from(groups.keys()).sort((a, b) => {
+    if(a === "Okategoriserat") return 1;
+    if(b === "Okategoriserat") return -1;
+    return a.localeCompare(b, "sv");
+  });
+
+  categoryNames.forEach(catName => {
+    const recipesInCat = sortRecipes(groups.get(catName), "date-desc");
+    const section = document.createElement("div");
+    section.className = "category-section";
+
+    const heading = document.createElement("div");
+    heading.className = "category-section-heading";
+    const h2 = document.createElement("h2");
+    h2.textContent = catName + " (" + recipesInCat.length + ")";
+    heading.appendChild(h2);
+
+    if(recipesInCat.length > RECIPES_PER_CATEGORY_PREVIEW){
+      const showAllBtn = document.createElement("button");
+      showAllBtn.type = "button";
+      showAllBtn.textContent = "Visa alla →";
+      showAllBtn.addEventListener("click", () => jumpToCategory(catName === "Okategoriserat" ? "" : catName));
+      heading.appendChild(showAllBtn);
     }
-    const label = document.createElement("div");
-    label.className = "label";
-    label.textContent = r.title || "Namnlöst recept";
-    card.appendChild(label);
-    if(r.category){
-      const catLabel = document.createElement("div");
-      catLabel.className = "category";
-      catLabel.textContent = r.category;
-      card.appendChild(catLabel);
-    }
-    grid.appendChild(card);
+    section.appendChild(heading);
+
+    const grid = document.createElement("div");
+    grid.className = "grid";
+    recipesInCat.slice(0, RECIPES_PER_CATEGORY_PREVIEW).forEach(r => grid.appendChild(buildCard(r)));
+    section.appendChild(grid);
+
+    container.appendChild(section);
   });
 }
 
@@ -801,15 +991,19 @@ function openDetail(id){
   document.getElementById("dOwnerActions").hidden = !isOwner;
   document.getElementById("sharePanel").hidden = !isOwner;
   const ownerNote = document.getElementById("dOwnerNote");
+  const hideBtn = document.getElementById("hideSharedBtn");
   if(!isOwner){
     ownerNote.hidden = false;
     ownerNote.textContent = "Delat med dig av " + (r.ownerEmail || "en annan användare") + " – du kan läsa men inte ändra.";
+    hideBtn.hidden = false;
   } else {
     ownerNote.hidden = true;
+    hideBtn.hidden = true;
   }
   if(isOwner){
     renderShareList(r);
   }
+  renderRatingWidget(r, isOwner);
 
   const srcEl = document.getElementById("dSource");
   if(r.sourceUrl){
@@ -853,7 +1047,55 @@ document.getElementById("deleteBtn").addEventListener("click", async () => {
   }
 });
 
-/* ---------- Sharing ---------- */
+document.getElementById("hideSharedBtn").addEventListener("click", async () => {
+  if(!currentDetailId) return;
+  await hideSharedRecipe(currentDetailId);
+  showView("list");
+});
+
+/* ---------- Rating ---------- */
+function renderRatingWidget(recipe, interactive){
+  const container = document.getElementById("dRating");
+  container.innerHTML = "";
+  container.className = interactive ? "rating interactive" : "rating";
+
+  const currentRating = recipe.rating || 0;
+
+  for(let i = 1; i <= 5; i++){
+    const star = document.createElement("span");
+    star.className = "star" + (i <= currentRating ? " filled" : "");
+    star.textContent = i <= currentRating ? "★" : "☆";
+    if(interactive){
+      star.addEventListener("click", async () => {
+        await setRating(currentDetailId, i);
+        recipe.rating = i;
+        renderRatingWidget(recipe, interactive);
+      });
+    }
+    container.appendChild(star);
+  }
+
+  if(interactive && currentRating > 0){
+    const clearLink = document.createElement("button");
+    clearLink.type = "button";
+    clearLink.className = "rating-clear";
+    clearLink.textContent = "Ta bort betyg";
+    clearLink.addEventListener("click", async () => {
+      await setRating(currentDetailId, 0);
+      recipe.rating = 0;
+      renderRatingWidget(recipe, interactive);
+    });
+    container.appendChild(clearLink);
+  }
+
+  if(!interactive && currentRating === 0){
+    container.hidden = true;
+  } else {
+    container.hidden = false;
+  }
+}
+
+
 function renderShareList(recipe){
   const list = document.getElementById("shareList");
   list.innerHTML = "";
