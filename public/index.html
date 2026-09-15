@@ -522,7 +522,8 @@
           <option value="">Ingen kategori</option>
           <option value="__new__">+ Ny kategori…</option>
         </select>
-        <input type="text" id="fCategoryNew" placeholder="Namn på ny kategori" style="margin-top:0.5rem;" hidden>
+        <input type="text" id="fCategoryNew" placeholder="t.ex. Bakverk eller Bakverk/Bullar" style="margin-top:0.5rem;" hidden>
+        <p class="hint" id="fCategoryHint" style="margin-top:0.3rem;" hidden>Skriv "Huvudkategori/Underkategori" för att skapa en underkategori, t.ex. "Bakverk/Bullar".</p>
 
         <label for="fPortions">Antal portioner</label>
         <input type="text" id="fPortions" placeholder="t.ex. 4 personer">
@@ -1003,6 +1004,15 @@ document.getElementById("sortMode").addEventListener("change", () => {
   }
 })();
 
+function categoryDisplay(cat){
+  return (cat || "").split("/").map(s => s.trim()).filter(Boolean).join(" › ");
+}
+
+function categoryTopLevel(cat){
+  const parts = (cat || "").split("/");
+  return (parts[0] || "").trim();
+}
+
 function updateCategoryOptions(){
   const categories = Array.from(new Set(
     recipesCache.map(r => (r.category || "").trim()).filter(Boolean)
@@ -1014,7 +1024,7 @@ function updateCategoryOptions(){
   categories.forEach(cat => {
     const opt = document.createElement("option");
     opt.value = cat;
-    opt.textContent = cat;
+    opt.textContent = categoryDisplay(cat);
     filterSelect.appendChild(opt);
   });
   if(categories.includes(previousValue)) filterSelect.value = previousValue;
@@ -1025,7 +1035,7 @@ function updateCategoryOptions(){
   categories.forEach(cat => {
     const opt = document.createElement("option");
     opt.value = cat;
-    opt.textContent = cat;
+    opt.textContent = categoryDisplay(cat);
     formSelect.appendChild(opt);
   });
   const newOpt = document.createElement("option");
@@ -1040,11 +1050,13 @@ function updateCategoryOptions(){
 function setCategoryFieldValue(cat){
   const formSelect = document.getElementById("fCategorySelect");
   const newInput = document.getElementById("fCategoryNew");
+  const hint = document.getElementById("fCategoryHint");
   cat = (cat || "").trim();
   if(!cat){
     formSelect.value = "";
     newInput.hidden = true;
     newInput.value = "";
+    hint.hidden = true;
     return;
   }
   const optionExists = Array.from(formSelect.options).some(o => o.value === cat);
@@ -1052,22 +1064,27 @@ function setCategoryFieldValue(cat){
     formSelect.value = cat;
     newInput.hidden = true;
     newInput.value = "";
+    hint.hidden = true;
   } else {
     formSelect.value = "__new__";
     newInput.hidden = false;
     newInput.value = cat;
+    hint.hidden = false;
   }
 }
 
 document.getElementById("fCategorySelect").addEventListener("change", (e) => {
   const newInput = document.getElementById("fCategoryNew");
+  const hint = document.getElementById("fCategoryHint");
   if(e.target.value === "__new__"){
     newInput.hidden = false;
     newInput.value = "";
     newInput.focus();
+    hint.hidden = false;
   } else {
     newInput.hidden = true;
     newInput.value = "";
+    hint.hidden = true;
   }
 });
 
@@ -1112,7 +1129,7 @@ function buildCard(r){
   if(r.category){
     const catLabel = document.createElement("div");
     catLabel.className = "category";
-    catLabel.textContent = r.category;
+    catLabel.textContent = categoryDisplay(r.category);
     card.appendChild(catLabel);
   }
   if(r.rating > 0){
@@ -1291,9 +1308,10 @@ function renderGroupedByCategory(container){
 
   const groups = new Map();
   recipesCache.forEach(r => {
-    const cat = (r.category || "").trim() || "Okategoriserat";
-    if(!groups.has(cat)) groups.set(cat, []);
-    groups.get(cat).push(r);
+    const cat = (r.category || "").trim();
+    const topLevel = cat ? categoryTopLevel(cat) : "Okategoriserat";
+    if(!groups.has(topLevel)) groups.set(topLevel, []);
+    groups.get(topLevel).push(r);
   });
 
   const categoryNames = Array.from(groups.keys()).sort((a, b) => {
@@ -1342,7 +1360,7 @@ function openDetail(id){
   if(r.image){ img.src = r.image; img.hidden = false; } else { img.hidden = true; }
 
   document.getElementById("dTitle").textContent = r.title || "Namnlöst recept";
-  document.getElementById("dCategory").textContent = r.category || "";
+  document.getElementById("dCategory").textContent = categoryDisplay(r.category);
   document.getElementById("dPortions").textContent = r.portions ? "Portioner: " + r.portions : "";
 
   currentBasePortions = extractPortionsNumber(r.portions);
