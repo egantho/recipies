@@ -534,7 +534,19 @@
   <!-- DETAIL VIEW -->
   <section id="view-detail" hidden>
     <a href="#" class="back-link no-print" id="backFromDetail">← Alla recept</a>
-    <button class="btn-outline no-print" id="printBtn" type="button" style="margin-bottom:1.2rem;">Skriv ut recept</button>
+    <div class="no-print" style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:1.2rem;">
+      <button class="btn-outline" id="printBtn" type="button">Skriv ut recept</button>
+      <button class="btn-outline" id="addToListBtn" type="button">Lägg till i lista</button>
+    </div>
+    <div class="panel selection-bar no-print" id="addToListPanel" hidden>
+      <select id="addToListSelect">
+        <option value="">Välj lista…</option>
+        <option value="__new__">+ Ny lista…</option>
+      </select>
+      <input type="text" id="addToListNewName" placeholder="Namn på ny lista" hidden>
+      <button class="btn-primary" id="addToListConfirmBtn" type="button">Lägg till</button>
+      <span class="status-line" id="addToListStatus"></span>
+    </div>
     <img class="detail-image" id="dImage" alt="" hidden>
     <h1 class="detail-title" id="dTitle"></h1>
     <div class="detail-source" id="dCategory" style="font-style:italic;color:var(--copper-dark);"></div>
@@ -1103,7 +1115,11 @@ function updateSelectionBar(){
 }
 
 function updateSelectionPlanOptions(){
-  const select = document.getElementById("selectionPlanSelect");
+  populatePlanSelect(document.getElementById("selectionPlanSelect"));
+  populatePlanSelect(document.getElementById("addToListSelect"));
+}
+
+function populatePlanSelect(select){
   const previous = select.value;
   select.innerHTML = '<option value="">Välj lista…</option>';
   plansCache.forEach(p => {
@@ -1367,6 +1383,56 @@ document.getElementById("hideSharedBtn").addEventListener("click", async () => {
 
 document.getElementById("printBtn").addEventListener("click", () => {
   window.print();
+});
+
+document.getElementById("addToListBtn").addEventListener("click", () => {
+  const panel = document.getElementById("addToListPanel");
+  panel.hidden = !panel.hidden;
+  if(!panel.hidden){
+    populatePlanSelect(document.getElementById("addToListSelect"));
+    document.getElementById("addToListStatus").textContent = "";
+  }
+});
+
+document.getElementById("addToListSelect").addEventListener("change", (e) => {
+  document.getElementById("addToListNewName").hidden = e.target.value !== "__new__";
+});
+
+document.getElementById("addToListConfirmBtn").addEventListener("click", async () => {
+  const select = document.getElementById("addToListSelect");
+  const statusEl = document.getElementById("addToListStatus");
+  const btn = document.getElementById("addToListConfirmBtn");
+  let planId = select.value;
+  if(!planId){
+    statusEl.className = "status-line err";
+    statusEl.textContent = "Välj eller skapa en lista först.";
+    return;
+  }
+  if(!currentDetailId) return;
+  btn.disabled = true;
+  try{
+    if(planId === "__new__"){
+      const name = document.getElementById("addToListNewName").value.trim();
+      if(!name){
+        statusEl.className = "status-line err";
+        statusEl.textContent = "Ange ett namn på listan.";
+        btn.disabled = false;
+        return;
+      }
+      planId = await createPlan(name);
+    }
+    await addRecipesToPlan(planId, [currentDetailId]);
+    statusEl.className = "status-line ok";
+    statusEl.textContent = "Tillagt i listan.";
+    document.getElementById("addToListNewName").value = "";
+    document.getElementById("addToListNewName").hidden = true;
+    select.value = "";
+  }catch(err){
+    statusEl.className = "status-line err";
+    statusEl.textContent = "Kunde inte lägga till: " + err.message;
+  }finally{
+    btn.disabled = false;
+  }
 });
 
 /* ---------- Rating ---------- */
