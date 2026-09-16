@@ -391,6 +391,12 @@
     margin-bottom: 1.2rem;
   }
   .selection-bar select, .selection-bar input{ flex: 0 1 200px; }
+  .selection-bar-top{
+    display:flex; align-items:center; justify-content:space-between;
+    flex-wrap:wrap; gap:0.6rem; margin-bottom: 0.7rem;
+  }
+  .type-toggle{ display:flex; gap:1rem; font-size: 0.9rem; color: var(--ink-soft); }
+  .type-toggle label{ display:flex; align-items:center; gap:0.35rem; cursor:pointer; }
   .share-panel{ margin-top: 2rem; }
   .share-panel h3{
     font-size: 0.85rem; color: var(--copper-dark); margin-bottom: 0.6rem;
@@ -496,15 +502,24 @@
         <button class="btn-primary" id="newRecipeBtn" type="button" disabled>Ansluter…</button>
       </div>
     </div>
-    <div class="panel selection-bar" id="selectionBar" hidden>
-      <span id="selectionCount"></span>
-      <select id="selectionPlanSelect">
-        <option value="">Välj lista…</option>
-        <option value="__new__">+ Ny lista…</option>
+    <div class="panel" id="selectionBar" hidden>
+      <div class="selection-bar-top">
+        <span id="selectionCount"></span>
+        <div class="type-toggle">
+          <label><input type="radio" name="selectionTargetType" value="plan" id="selectionTypePlan" checked> Lista</label>
+          <label><input type="radio" name="selectionTargetType" value="shopping" id="selectionTypeShopping"> Inköpslista</label>
+        </div>
+      </div>
+      <select id="selectionListSelect">
+        <option value="">+ Ny lista (ange namn nedan)</option>
       </select>
-      <input type="text" id="selectionNewPlanName" placeholder="Namn på ny lista" hidden>
-      <button class="btn-primary" id="addSelectionBtn" type="button">Lägg till i lista</button>
-      <button class="btn-quiet" id="cancelSelectionBtn" type="button">Avbryt</button>
+      <input type="text" id="selectionNewListName" placeholder="Namn på ny lista" style="margin-top:0.5rem;">
+      <p class="hint" id="selectionNewListHint" style="margin-top:0.4rem;">Ingen lista vald – skriv ett namn ovan för att skapa en ny, eller välj en befintlig lista.</p>
+      <div class="selection-bar" style="margin-top:0.8rem;">
+        <button class="btn-primary" id="addSelectionBtn" type="button">Lägg till</button>
+        <button class="btn-quiet" id="cancelSelectionBtn" type="button">Avbryt</button>
+        <span class="status-line" id="selectionStatus"></span>
+      </div>
     </div>
     <div id="recipeContainer">
       <div class="grid" id="recipeGrid"></div>
@@ -1341,6 +1356,7 @@ function populateShoppingListSelect(select){
 function updateShoppingListOptions(){
   populateShoppingListSelect(document.getElementById("recipeShoppingSelect"));
   populateShoppingListSelect(document.getElementById("planShoppingSelect"));
+  if(getSelectionTargetType() === "shopping") populateSelectionListSelect();
 }
 
 function renderShoppingListsOverview(){
@@ -1476,7 +1492,20 @@ document.getElementById("backFromDetail").addEventListener("click", e => {
 
 /* ---------- List / grid ---------- */
 document.getElementById("searchInput").addEventListener("input", renderGrid);
-document.getElementById("categoryFilter").addEventListener("change", renderGrid);
+
+let gridResizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(gridResizeTimer);
+  gridResizeTimer = setTimeout(() => {
+    if(!document.getElementById("view-list").hidden){
+      renderGrid();
+    }
+  }, 200);
+});
+document.getElementById("categoryFilter").addEventListener("change", (e) => {
+  activeCategoryFilter = e.target.value;
+  renderGrid();
+});
 document.getElementById("sortMode").addEventListener("change", () => {
   localStorage.setItem("receptladan_sortmode", document.getElementById("sortMode").value);
   updateSubcatsCheckboxVisibility();
@@ -1516,6 +1545,25 @@ function getCategoryEntries(catString){
   return (catString || "").split(";").map(s => s.trim()).filter(Boolean);
 }
 
+let activeCategoryFilter = "";
+
+function setCategoryFilterValue(value){
+  const select = document.getElementById("categoryFilter");
+  activeCategoryFilter = value || "";
+  if(!activeCategoryFilter){
+    select.value = "";
+    return;
+  }
+  const exists = Array.from(select.options).some(o => o.value === activeCategoryFilter);
+  if(!exists){
+    const opt = document.createElement("option");
+    opt.value = activeCategoryFilter;
+    opt.textContent = categoryDisplay(activeCategoryFilter);
+    select.appendChild(opt);
+  }
+  select.value = activeCategoryFilter;
+}
+
 function updateCategoryOptions(){
   const allEntries = new Set();
   recipesCache.forEach(r => {
@@ -1524,7 +1572,6 @@ function updateCategoryOptions(){
   const categories = Array.from(allEntries).sort((a, b) => a.localeCompare(b, "sv"));
 
   const filterSelect = document.getElementById("categoryFilter");
-  const previousValue = filterSelect.value;
   filterSelect.innerHTML = '<option value="">Alla kategorier</option>';
   categories.forEach(cat => {
     const opt = document.createElement("option");
@@ -1532,7 +1579,7 @@ function updateCategoryOptions(){
     opt.textContent = categoryDisplay(cat);
     filterSelect.appendChild(opt);
   });
-  if(categories.includes(previousValue)) filterSelect.value = previousValue;
+  setCategoryFilterValue(activeCategoryFilter);
 
   const suggestWrap = document.getElementById("categorySuggestions");
   suggestWrap.innerHTML = "";
@@ -1625,13 +1672,44 @@ function toggleSelection(id, cardEl){
 function updateSelectionBar(){
   const bar = document.getElementById("selectionBar");
   const count = selectedRecipeIds.size;
+  const wasHidden = bar.hidden;
   bar.hidden = !selectionModeActive || count === 0;
   document.getElementById("selectionCount").textContent = count + " valda";
+  if(wasHidden && !bar.hidden){
+    populateSelectionListSelect();
+  }
 }
 
-function updateSelectionPlanOptions(){
-  populatePlanSelect(document.getElementById("selectionPlanSelect"));
-  populatePlanSelect(document.getElementById("addToListSelect"));
+function getSelectionTargetType(){
+  return document.getElementById("selectionTypeShopping").checked ? "shopping" : "plan";
+}
+
+function updateSelectionNewNameVisibility(){
+  const select = document.getElementById("selectionListSelect");
+  const isNew = select.value === "";
+  document.getElementById("selectionNewListName").hidden = !isNew;
+  document.getElementById("selectionNewListHint").hidden = !isNew;
+}
+
+function populateSelectionListSelect(){
+  const select = document.getElementById("selectionListSelect");
+  const type = getSelectionTargetType();
+  const previous = select.value;
+  select.innerHTML = '<option value="">+ Ny lista (ange namn nedan)</option>';
+  const items = type === "shopping" ? shoppingListsCache : plansCache;
+  items.forEach(item => {
+    const opt = document.createElement("option");
+    opt.value = item.id;
+    const count = type === "shopping"
+      ? (Array.isArray(item.items) ? item.items.length : 0)
+      : (Array.isArray(item.recipeIds) ? item.recipeIds.length : 0);
+    opt.textContent = item.name + " (" + count + ")";
+    select.appendChild(opt);
+  });
+  if(Array.from(select.options).some(o => o.value === previous)) select.value = previous;
+  document.getElementById("selectionNewListName").placeholder =
+    type === "shopping" ? "Namn på ny inköpslista" : "Namn på ny lista";
+  updateSelectionNewNameVisibility();
 }
 
 function populatePlanSelect(select){
@@ -1660,48 +1738,71 @@ document.getElementById("selectModeBtn").addEventListener("click", () => {
   renderGrid();
 });
 
-document.getElementById("selectionPlanSelect").addEventListener("change", (e) => {
-  document.getElementById("selectionNewPlanName").hidden = e.target.value !== "__new__";
-});
+document.getElementById("selectionTypePlan").addEventListener("change", populateSelectionListSelect);
+document.getElementById("selectionTypeShopping").addEventListener("change", populateSelectionListSelect);
+document.getElementById("selectionListSelect").addEventListener("change", updateSelectionNewNameVisibility);
 
 document.getElementById("cancelSelectionBtn").addEventListener("click", () => {
   selectedRecipeIds.clear();
   selectionModeActive = false;
   document.getElementById("selectModeBtn").textContent = "Välj recept";
+  document.getElementById("selectionStatus").textContent = "";
   updateSelectionBar();
   renderGrid();
 });
 
 document.getElementById("addSelectionBtn").addEventListener("click", async () => {
-  const select = document.getElementById("selectionPlanSelect");
+  const select = document.getElementById("selectionListSelect");
   const btn = document.getElementById("addSelectionBtn");
-  let planId = select.value;
-  if(!planId){
-    alert("Välj eller skapa en lista först.");
-    return;
+  const statusEl = document.getElementById("selectionStatus");
+  const type = getSelectionTargetType();
+  let listId = select.value;
+
+  statusEl.className = "status-line";
+  statusEl.textContent = "";
+
+  if(!listId){
+    const name = document.getElementById("selectionNewListName").value.trim();
+    if(!name){
+      statusEl.className = "status-line err";
+      statusEl.textContent = "Skriv ett namn för att skapa en ny lista, eller välj en befintlig ovan.";
+      return;
+    }
   }
+
   btn.disabled = true;
   try{
-    if(planId === "__new__"){
-      const name = document.getElementById("selectionNewPlanName").value.trim();
-      if(!name){
-        alert("Ange ett namn på listan.");
-        btn.disabled = false;
-        return;
+    const selectedRecipes = Array.from(selectedRecipeIds)
+      .map(id => recipesCache.find(r => r.id === id))
+      .filter(Boolean);
+
+    if(type === "plan"){
+      if(!listId){
+        const name = document.getElementById("selectionNewListName").value.trim();
+        listId = await createPlan(name);
       }
-      planId = await createPlan(name);
+      await addRecipesToPlan(listId, Array.from(selectedRecipeIds));
+    } else {
+      let items = [];
+      selectedRecipes.forEach(r => { items = items.concat(ingredientsAsShoppingItems(r)); });
+      if(!listId){
+        const name = document.getElementById("selectionNewListName").value.trim();
+        listId = await createShoppingList(name, items);
+      } else {
+        await appendItemsToShoppingList(listId, items);
+      }
     }
-    await addRecipesToPlan(planId, Array.from(selectedRecipeIds));
+
     selectedRecipeIds.clear();
     selectionModeActive = false;
     document.getElementById("selectModeBtn").textContent = "Välj recept";
-    document.getElementById("selectionNewPlanName").value = "";
-    document.getElementById("selectionNewPlanName").hidden = true;
+    document.getElementById("selectionNewListName").value = "";
     select.value = "";
     updateSelectionBar();
     renderGrid();
   }catch(err){
-    alert("Kunde inte lägga till: " + err.message);
+    statusEl.className = "status-line err";
+    statusEl.textContent = "Kunde inte lägga till: " + err.message;
   }finally{
     btn.disabled = false;
   }
@@ -1728,7 +1829,7 @@ function sortRecipes(list, mode){
 }
 
 function jumpToCategory(cat){
-  document.getElementById("categoryFilter").value = cat;
+  setCategoryFilterValue(cat);
   if(!document.getElementById("sortMode").value){
     document.getElementById("sortMode").value = "date-desc";
   }
@@ -1739,7 +1840,7 @@ function jumpToCategory(cat){
 
 function renderGrid(){
   const q = document.getElementById("searchInput").value.trim().toLowerCase();
-  const cat = document.getElementById("categoryFilter").value;
+  const cat = activeCategoryFilter;
   const mode = document.getElementById("sortMode").value;
   const container = document.getElementById("recipeContainer");
 
@@ -1772,8 +1873,14 @@ function renderGrid(){
   container.appendChild(grid);
 }
 
-const RECIPES_PER_SUBGROUP_PREVIEW = 4;
-const RECIPES_PER_TOPLEVEL_PREVIEW = 6;
+function getRecipesPerRow(){
+  const container = document.getElementById("recipeContainer");
+  const width = container ? container.clientWidth : window.innerWidth;
+  const minColWidth = 150;
+  const gap = 16;
+  const cols = Math.floor((width + gap) / (minColWidth + gap));
+  return Math.max(1, cols);
+}
 
 function buildCategoryTree(){
   const tree = new Map(); // Map<topLevel, Map<subLabel, recipe[]>>
@@ -1799,6 +1906,7 @@ function renderGroupedByCategory(container){
 
   const showSubcats = document.getElementById("showSubcatsCheckbox").checked;
   const tree = buildCategoryTree();
+  const perRow = getRecipesPerRow();
 
   const topNames = Array.from(tree.keys()).sort((a, b) => {
     if(a === "Okategoriserat") return 1;
@@ -1821,7 +1929,7 @@ function renderGroupedByCategory(container){
     h2.textContent = topName + " (" + totalCount + ")";
     heading.appendChild(h2);
 
-    const previewLimit = showSubcats ? RECIPES_PER_SUBGROUP_PREVIEW : RECIPES_PER_TOPLEVEL_PREVIEW;
+    const previewLimit = perRow;
     if(totalCount > previewLimit){
       const showAllBtn = document.createElement("button");
       showAllBtn.type = "button";
@@ -1835,7 +1943,7 @@ function renderGroupedByCategory(container){
       const sorted = sortRecipes(Array.from(allRecipesMap.values()), "date-desc");
       const grid = document.createElement("div");
       grid.className = "grid";
-      sorted.slice(0, RECIPES_PER_TOPLEVEL_PREVIEW).forEach(r => grid.appendChild(buildCard(r)));
+      sorted.slice(0, perRow).forEach(r => grid.appendChild(buildCard(r)));
       section.appendChild(grid);
       container.appendChild(section);
       return;
@@ -1859,10 +1967,10 @@ function renderGroupedByCategory(container){
 
       const grid = document.createElement("div");
       grid.className = "grid";
-      recipesInSub.slice(0, RECIPES_PER_SUBGROUP_PREVIEW).forEach(r => grid.appendChild(buildCard(r)));
+      recipesInSub.slice(0, perRow).forEach(r => grid.appendChild(buildCard(r)));
       section.appendChild(grid);
 
-      if(recipesInSub.length > RECIPES_PER_SUBGROUP_PREVIEW){
+      if(recipesInSub.length > perRow){
         const moreBtn = document.createElement("button");
         moreBtn.type = "button";
         moreBtn.className = "btn-quiet";
