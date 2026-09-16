@@ -599,7 +599,7 @@
         <button class="btn-outline" id="fetchBtn" type="button">Hämta</button>
       </div>
       <div class="status-line" id="fetchStatus"></div>
-      <p class="hint">Fungerar bäst på sidor som taggat sitt recept med strukturerad data. Går det inte automatiskt får du peka ut det du vill spara nedan, eller fylla i för hand.</p>
+      <p class="hint" id="fetchGenericHint">Fungerar bäst på sidor som taggat sitt recept med strukturerad data. Går det inte automatiskt får du peka ut det du vill spara nedan, eller fylla i för hand.</p>
       <button class="btn-quiet" id="skipFetchBtn" type="button" style="margin-top:0.6rem;">Hoppa över länken, fyll i för hand</button>
 
       <div class="google-search-block">
@@ -2310,6 +2310,7 @@ function resetAddView(){
   document.getElementById("urlInput").value = "";
   document.getElementById("fetchStatus").textContent = "";
   document.getElementById("fetchStatus").className = "status-line";
+  document.getElementById("fetchGenericHint").hidden = false;
   document.getElementById("googleSearchInput").value = "";
   document.getElementById("pickerPanel").hidden = true;
   document.getElementById("pickerImages").innerHTML = "";
@@ -2525,6 +2526,7 @@ document.getElementById("fetchBtn").addEventListener("click", async () => {
 
   statusEl.className = "status-line ok";
   statusEl.innerHTML = "<span class=\"loader\"></span>Hämtar sidan…";
+  document.getElementById("fetchGenericHint").hidden = true;
   document.getElementById("pickerPanel").hidden = true;
 
   try{
