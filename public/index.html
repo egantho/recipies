@@ -272,10 +272,14 @@
     border: 1px solid var(--line); border-radius: 4px;
     padding: 0.6rem 0.8rem; background: var(--paper-raised);
   }
-  .search-result-item:hover{ border-color: var(--copper); }
-  .search-result-title{ font-weight: 600; margin-bottom: 0.2rem; }
+  .search-result-title{
+    display:block; font-weight: 600; margin-bottom: 0.2rem;
+    color: var(--ink); text-decoration: none;
+  }
+  .search-result-title:hover{ color: var(--copper-dark); text-decoration: underline; }
   .search-result-snippet{ font-size: 0.85rem; color: var(--ink); margin-bottom: 0.3rem; }
-  .search-result-url{ font-size: 0.76rem; color: var(--ink-soft); word-break: break-all; }
+  .search-result-url{ font-size: 0.76rem; color: var(--ink-soft); word-break: break-all; margin-bottom: 0.6rem; }
+  .search-result-use-btn{ font-size: 0.85rem; padding: 0.35rem 0.8rem; }
 
   .picker{
     margin-top: 1rem;
@@ -2417,10 +2421,7 @@ async function fetchBlobViaProxy(url){
 }
 
 /* ---------- Receptsökning (DuckDuckGo, ingen nyckel behövs) ---------- */
-async function fetchRecipeSearchResults(query){
-  const searchUrl = "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query + " recept");
-  const html = await fetchTextViaProxy(searchUrl);
-  const doc = new DOMParser().parseFromString(html, "text/html");
+function parseStructuredDdgResults(doc){
   const results = [];
   doc.querySelectorAll(".result").forEach(resultEl => {
     const linkEl = resultEl.querySelector(".result__a");
@@ -2438,7 +2439,46 @@ async function fetchRecipeSearchResults(query){
       snippet: snippetEl ? snippetEl.textContent.replace(/\s+/g, " ").trim() : ""
     });
   });
-  return results.slice(0, 8);
+  return results;
+}
+
+function parseGenericDdgAnchors(doc){
+  const results = [];
+  const seen = new Set();
+  doc.querySelectorAll("a[href]").forEach(a => {
+    const href = a.getAttribute("href") || "";
+    const match = href.match(/uddg=([^&]+)/);
+    if(!match) return;
+    let url;
+    try{ url = decodeURIComponent(match[1]); }catch(e){ return; }
+    if(!url.startsWith("http") || seen.has(url)) return;
+    const title = a.textContent.replace(/\s+/g, " ").trim();
+    if(!title) return;
+    seen.add(url);
+    results.push({ title, url, snippet: "" });
+  });
+  return results;
+}
+
+async function fetchRecipeSearchResults(query){
+  const engines = [
+    "https://html.duckduckgo.com/html/?q=",
+    "https://lite.duckduckgo.com/lite/?q="
+  ];
+  let lastErr;
+  for(const base of engines){
+    try{
+      const html = await fetchTextViaProxy(base + encodeURIComponent(query + " recept"));
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      let results = parseStructuredDdgResults(doc);
+      if(!results.length) results = parseGenericDdgAnchors(doc);
+      if(results.length) return results.slice(0, 8);
+      lastErr = new Error("Inga träffar från sökmotorn");
+    }catch(e){
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("Sökningen misslyckades");
 }
 
 document.getElementById("recipeSearchBtn").addEventListener("click", async () => {
@@ -2465,14 +2505,16 @@ document.getElementById("recipeSearchBtn").addEventListener("click", async () =>
     }
     statusEl.textContent = "";
     results.forEach(r => {
-      const item = document.createElement("button");
-      item.type = "button";
+      const item = document.createElement("div");
       item.className = "search-result-item";
 
-      const titleEl = document.createElement("div");
-      titleEl.className = "search-result-title";
-      titleEl.textContent = r.title;
-      item.appendChild(titleEl);
+      const titleLink = document.createElement("a");
+      titleLink.className = "search-result-title";
+      titleLink.href = r.url;
+      titleLink.target = "_blank";
+      titleLink.rel = "noopener";
+      titleLink.textContent = r.title;
+      item.appendChild(titleLink);
 
       if(r.snippet){
         const snip = document.createElement("div");
@@ -2486,12 +2528,17 @@ document.getElementById("recipeSearchBtn").addEventListener("click", async () =>
       urlEl.textContent = r.url;
       item.appendChild(urlEl);
 
-      item.addEventListener("click", () => {
+      const useBtn = document.createElement("button");
+      useBtn.type = "button";
+      useBtn.className = "btn-outline search-result-use-btn";
+      useBtn.textContent = "Hämta det här receptet";
+      useBtn.addEventListener("click", () => {
         document.getElementById("urlInput").value = r.url;
         resultsEl.innerHTML = "";
         document.getElementById("recipeSearchInput").value = "";
         document.getElementById("fetchBtn").click();
       });
+      item.appendChild(useBtn);
 
       resultsEl.appendChild(item);
     });
