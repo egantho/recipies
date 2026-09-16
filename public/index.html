@@ -263,23 +263,6 @@
   .image-pick-row .controls{ flex:1; display:flex; flex-direction:column; gap:0.4rem; }
 
   /* Picker (fallback manual pointing) */
-  .search-recipe-block{
-    margin-top: 1rem; border-top: 1px dashed var(--line); padding-top: 1rem;
-  }
-  .search-results{ margin-top: 0.8rem; display:flex; flex-direction:column; gap:0.6rem; }
-  .search-result-item{
-    display:block; width:100%; text-align:left;
-    border: 1px solid var(--line); border-radius: 4px;
-    padding: 0.6rem 0.8rem; background: var(--paper-raised);
-  }
-  .search-result-title{
-    display:block; font-weight: 600; margin-bottom: 0.2rem;
-    color: var(--ink); text-decoration: none;
-  }
-  .search-result-title:hover{ color: var(--copper-dark); text-decoration: underline; }
-  .search-result-snippet{ font-size: 0.85rem; color: var(--ink); margin-bottom: 0.3rem; }
-  .search-result-url{ font-size: 0.76rem; color: var(--ink-soft); word-break: break-all; margin-bottom: 0.6rem; }
-  .search-result-use-btn{ font-size: 0.85rem; padding: 0.35rem 0.8rem; }
 
   .picker{
     margin-top: 1rem;
@@ -614,16 +597,6 @@
       <div class="status-line" id="fetchStatus"></div>
       <p class="hint">Fungerar bäst på sidor som taggat sitt recept med strukturerad data. Går det inte automatiskt får du peka ut det du vill spara nedan, eller fylla i för hand.</p>
       <button class="btn-quiet" id="skipFetchBtn" type="button" style="margin-top:0.6rem;">Hoppa över länken, fyll i för hand</button>
-
-      <div class="search-recipe-block">
-        <p class="hint" style="margin-top:0;">Eller sök efter ett recept:</p>
-        <div class="field-row">
-          <input type="text" id="recipeSearchInput" placeholder="t.ex. kanelbullar med kardemumma">
-          <button class="btn-outline" id="recipeSearchBtn" type="button">Sök</button>
-        </div>
-        <div class="status-line" id="recipeSearchStatus"></div>
-        <div id="recipeSearchResults" class="search-results"></div>
-      </div>
     </div>
 
     <div class="panel picker" id="pickerPanel" hidden>
@@ -2324,9 +2297,6 @@ function resetAddView(){
   document.getElementById("urlInput").value = "";
   document.getElementById("fetchStatus").textContent = "";
   document.getElementById("fetchStatus").className = "status-line";
-  document.getElementById("recipeSearchInput").value = "";
-  document.getElementById("recipeSearchStatus").textContent = "";
-  document.getElementById("recipeSearchResults").innerHTML = "";
   document.getElementById("pickerPanel").hidden = true;
   document.getElementById("pickerImages").innerHTML = "";
   document.getElementById("pickerBlocks").innerHTML = "";
@@ -2419,141 +2389,6 @@ async function fetchBlobViaProxy(url){
   }
   throw lastErr || new Error("Alla proxyer misslyckades");
 }
-
-/* ---------- Receptsökning (DuckDuckGo, ingen nyckel behövs) ---------- */
-function parseStructuredDdgResults(doc){
-  const results = [];
-  doc.querySelectorAll(".result").forEach(resultEl => {
-    const linkEl = resultEl.querySelector(".result__a");
-    if(!linkEl) return;
-    let href = linkEl.getAttribute("href") || "";
-    const match = href.match(/[?&]uddg=([^&]+)/);
-    if(match){
-      try{ href = decodeURIComponent(match[1]); }catch(e){}
-    }
-    if(!href.startsWith("http")) return;
-    const snippetEl = resultEl.querySelector(".result__snippet");
-    results.push({
-      title: linkEl.textContent.replace(/\s+/g, " ").trim(),
-      url: href,
-      snippet: snippetEl ? snippetEl.textContent.replace(/\s+/g, " ").trim() : ""
-    });
-  });
-  return results;
-}
-
-function parseGenericDdgAnchors(doc){
-  const results = [];
-  const seen = new Set();
-  doc.querySelectorAll("a[href]").forEach(a => {
-    const href = a.getAttribute("href") || "";
-    const match = href.match(/uddg=([^&]+)/);
-    if(!match) return;
-    let url;
-    try{ url = decodeURIComponent(match[1]); }catch(e){ return; }
-    if(!url.startsWith("http") || seen.has(url)) return;
-    const title = a.textContent.replace(/\s+/g, " ").trim();
-    if(!title) return;
-    seen.add(url);
-    results.push({ title, url, snippet: "" });
-  });
-  return results;
-}
-
-async function fetchRecipeSearchResults(query){
-  const engines = [
-    "https://html.duckduckgo.com/html/?q=",
-    "https://lite.duckduckgo.com/lite/?q="
-  ];
-  let lastErr;
-  for(const base of engines){
-    try{
-      const html = await fetchTextViaProxy(base + encodeURIComponent(query + " recept"));
-      const doc = new DOMParser().parseFromString(html, "text/html");
-      let results = parseStructuredDdgResults(doc);
-      if(!results.length) results = parseGenericDdgAnchors(doc);
-      if(results.length) return results.slice(0, 8);
-      lastErr = new Error("Inga träffar från sökmotorn");
-    }catch(e){
-      lastErr = e;
-    }
-  }
-  throw lastErr || new Error("Sökningen misslyckades");
-}
-
-document.getElementById("recipeSearchBtn").addEventListener("click", async () => {
-  const query = document.getElementById("recipeSearchInput").value.trim();
-  const statusEl = document.getElementById("recipeSearchStatus");
-  const resultsEl = document.getElementById("recipeSearchResults");
-  resultsEl.innerHTML = "";
-
-  if(!query){
-    statusEl.className = "status-line err";
-    statusEl.textContent = "Skriv vad du letar efter, t.ex. ett rätt- eller bakverksnamn.";
-    return;
-  }
-
-  statusEl.className = "status-line ok";
-  statusEl.innerHTML = "<span class=\"loader\"></span>Söker…";
-
-  try{
-    const results = await fetchRecipeSearchResults(query);
-    if(!results.length){
-      statusEl.className = "status-line err";
-      statusEl.textContent = "Inga träffar. Testa en annan sökning, eller klistra in en länk direkt ovan.";
-      return;
-    }
-    statusEl.textContent = "";
-    results.forEach(r => {
-      const item = document.createElement("div");
-      item.className = "search-result-item";
-
-      const titleLink = document.createElement("a");
-      titleLink.className = "search-result-title";
-      titleLink.href = r.url;
-      titleLink.target = "_blank";
-      titleLink.rel = "noopener";
-      titleLink.textContent = r.title;
-      item.appendChild(titleLink);
-
-      if(r.snippet){
-        const snip = document.createElement("div");
-        snip.className = "search-result-snippet";
-        snip.textContent = r.snippet;
-        item.appendChild(snip);
-      }
-
-      const urlEl = document.createElement("div");
-      urlEl.className = "search-result-url";
-      urlEl.textContent = r.url;
-      item.appendChild(urlEl);
-
-      const useBtn = document.createElement("button");
-      useBtn.type = "button";
-      useBtn.className = "btn-outline search-result-use-btn";
-      useBtn.textContent = "Hämta det här receptet";
-      useBtn.addEventListener("click", () => {
-        document.getElementById("urlInput").value = r.url;
-        resultsEl.innerHTML = "";
-        document.getElementById("recipeSearchInput").value = "";
-        document.getElementById("fetchBtn").click();
-      });
-      item.appendChild(useBtn);
-
-      resultsEl.appendChild(item);
-    });
-  }catch(err){
-    statusEl.className = "status-line err";
-    statusEl.textContent = "Kunde inte söka just nu (" + err.message + "). Testa igen om en stund, eller klistra in en länk direkt.";
-  }
-});
-
-document.getElementById("recipeSearchInput").addEventListener("keydown", (e) => {
-  if(e.key === "Enter"){
-    e.preventDefault();
-    document.getElementById("recipeSearchBtn").click();
-  }
-});
 
 function absoluteUrl(maybeRelative, base){
   try{ return new URL(maybeRelative, base).href; }
@@ -2691,9 +2526,14 @@ document.getElementById("fetchBtn").addEventListener("click", async () => {
       statusEl.textContent = "Recept hittat automatiskt. Kolla igenom och redigera vid behov innan du sparar.";
       statusEl.className = "status-line ok";
     } else {
-      statusEl.textContent = "Hittade ingen strukturerad receptdata. Peka ut det du vill spara nedan.";
-      statusEl.className = "status-line ok";
-      buildPicker(doc, url);
+      const pickerResult = buildPicker(doc, url);
+      if(pickerResult.blockCount === 0){
+        statusEl.className = "status-line err";
+        statusEl.textContent = "Kan inte hämta receptinnehållet på sidan. Vill du ändå spara det här receptet kan du fylla i det för hand.";
+      } else {
+        statusEl.textContent = "Hittade ingen strukturerad receptdata. Peka ut det du vill spara nedan.";
+        statusEl.className = "status-line ok";
+      }
     }
   }catch(err){
     console.error(err);
@@ -2797,7 +2637,8 @@ function buildPicker(doc, baseUrl){
     blocksWrap.appendChild(el);
   });
 
-  panel.hidden = false;
+  panel.hidden = blocks.length === 0 && uniqueImgs.length === 0;
+  return { imageCount: uniqueImgs.length, blockCount: blocks.length };
 }
 
 /* ---------- Manual image controls ---------- */
