@@ -264,6 +264,10 @@
 
   /* Picker (fallback manual pointing) */
 
+  .google-search-block{
+    margin-top: 1rem; border-top: 1px dashed var(--line); padding-top: 1rem;
+  }
+
   .picker{
     margin-top: 1rem;
     border-top: 1px dashed var(--line);
@@ -597,6 +601,15 @@
       <div class="status-line" id="fetchStatus"></div>
       <p class="hint">Fungerar bäst på sidor som taggat sitt recept med strukturerad data. Går det inte automatiskt får du peka ut det du vill spara nedan, eller fylla i för hand.</p>
       <button class="btn-quiet" id="skipFetchBtn" type="button" style="margin-top:0.6rem;">Hoppa över länken, fyll i för hand</button>
+
+      <div class="google-search-block">
+        <p class="hint" style="margin-top:0;">Hittar du inte länken? Sök upp receptet på Google:</p>
+        <div class="field-row">
+          <input type="text" id="googleSearchInput" placeholder="t.ex. kanelbullar med kardemumma">
+          <button class="btn-outline" id="googleSearchBtn" type="button">Sök på Google</button>
+        </div>
+        <p class="hint" style="margin-top:0.4rem;">Öppnas i en ny flik. Klistra sedan in länken till receptet du hittar ovan.</p>
+      </div>
     </div>
 
     <div class="panel picker" id="pickerPanel" hidden>
@@ -2297,6 +2310,7 @@ function resetAddView(){
   document.getElementById("urlInput").value = "";
   document.getElementById("fetchStatus").textContent = "";
   document.getElementById("fetchStatus").className = "status-line";
+  document.getElementById("googleSearchInput").value = "";
   document.getElementById("pickerPanel").hidden = true;
   document.getElementById("pickerImages").innerHTML = "";
   document.getElementById("pickerBlocks").innerHTML = "";
@@ -2347,6 +2361,20 @@ function openEditor(id){
 document.getElementById("skipFetchBtn").addEventListener("click", () => {
   document.getElementById("fetchPanel").querySelector("h2").textContent = "Hämta från en länk (valfritt)";
   document.getElementById("fTitle").focus();
+});
+
+function openGoogleSearch(){
+  const query = document.getElementById("googleSearchInput").value.trim();
+  if(!query) return;
+  const url = "https://www.google.com/search?q=" + encodeURIComponent(query + " recept");
+  window.open(url, "_blank", "noopener");
+}
+document.getElementById("googleSearchBtn").addEventListener("click", openGoogleSearch);
+document.getElementById("googleSearchInput").addEventListener("keydown", (e) => {
+  if(e.key === "Enter"){
+    e.preventDefault();
+    openGoogleSearch();
+  }
 });
 
 /* ---------- Fetching + parsing ---------- */
@@ -2543,6 +2571,29 @@ document.getElementById("fetchBtn").addEventListener("click", async () => {
 });
 
 /* ---------- Picker (manual pointing) ---------- */
+function isBoilerplate(el){
+  return !!el.closest('nav, header, footer, [role="navigation"], [aria-label*="meny" i], [aria-label*="menu" i]');
+}
+
+const BOILERPLATE_PHRASES = [
+  "cookie", "cookies", "nyhetsbrev", "prenumerera", "integritetspolicy",
+  "logga in", "skapa konto", "läs mer om", "följ oss", "dela på facebook",
+  "dela på instagram", "alla rättigheter", "©"
+];
+
+function looksLikeBoilerplateText(text){
+  const lower = text.toLowerCase();
+  return BOILERPLATE_PHRASES.some(phrase => lower.includes(phrase));
+}
+
+function looksLikeNavList(items){
+  if(items.length < 3) return false;
+  const shortAndCapsCount = items.filter(item =>
+    item.length <= 25 && item === item.toUpperCase() && item !== item.toLowerCase()
+  ).length;
+  return shortAndCapsCount / items.length > 0.6;
+}
+
 function buildPicker(doc, baseUrl){
   const panel = document.getElementById("pickerPanel");
   const imagesWrap = document.getElementById("pickerImages");
@@ -2550,8 +2601,9 @@ function buildPicker(doc, baseUrl){
   imagesWrap.innerHTML = "";
   blocksWrap.innerHTML = "";
 
-  // Images
+  // Images (skip logos/icons living in nav, header or footer)
   const imgs = Array.from(doc.querySelectorAll("img"))
+    .filter(img => !isBoilerplate(img))
     .map(img => absoluteUrl(img.getAttribute("src") || "", baseUrl))
     .filter(src => src && src.startsWith("http"));
   const uniqueImgs = Array.from(new Set(imgs)).slice(0, 24);
@@ -2576,24 +2628,28 @@ function buildPicker(doc, baseUrl){
   });
 
   // Text blocks: lists (ingredient candidates) and paragraphs/headings (description candidates)
+  // Menus, headers and footers are excluded since they're never recipe content.
   const blocks = [];
   doc.querySelectorAll("ul, ol").forEach(list => {
+    if(isBoilerplate(list)) return;
     const items = Array.from(list.querySelectorAll("li"))
       .map(li => li.textContent.replace(/\s+/g, " ").trim())
       .filter(Boolean);
-    if(items.length >= 2){
+    if(items.length >= 2 && !looksLikeNavList(items)){
       blocks.push({ kind: "list", text: items.join("\n"), snippet: items.slice(0,4).join(" · ") });
     }
   });
   doc.querySelectorAll("h1, h2").forEach(h => {
+    if(isBoilerplate(h)) return;
     const text = h.textContent.replace(/\s+/g, " ").trim();
-    if(text.length > 2 && text.length < 140){
+    if(text.length > 2 && text.length < 140 && !looksLikeBoilerplateText(text)){
       blocks.push({ kind: "heading", text, snippet: text });
     }
   });
   doc.querySelectorAll("p").forEach(p => {
+    if(isBoilerplate(p)) return;
     const text = p.textContent.replace(/\s+/g, " ").trim();
-    if(text.length > 40){
+    if(text.length > 40 && !looksLikeBoilerplateText(text)){
       blocks.push({ kind: "paragraph", text, snippet: text });
     }
   });
