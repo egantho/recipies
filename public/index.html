@@ -603,7 +603,7 @@
       <button class="btn-quiet" id="skipFetchBtn" type="button" style="margin-top:0.6rem;">Hoppa över länken, fyll i för hand</button>
 
       <div class="google-search-block">
-        <p class="hint" style="margin-top:0;">Hittar du inte länken? Sök upp receptet på Google:</p>
+        <p class="hint" style="margin-top:0;">Sök recept på Google:</p>
         <div class="field-row">
           <input type="text" id="googleSearchInput" placeholder="t.ex. kanelbullar med kardemumma">
           <button class="btn-outline" id="googleSearchBtn" type="button">Sök på Google</button>
@@ -2559,7 +2559,7 @@ document.getElementById("fetchBtn").addEventListener("click", async () => {
         statusEl.className = "status-line err";
         statusEl.textContent = "Kan inte hämta receptinnehållet på sidan. Vill du ändå spara det här receptet kan du fylla i det för hand.";
       } else {
-        statusEl.textContent = "Hittade ingen strukturerad receptdata. Peka ut det du vill spara nedan.";
+        statusEl.textContent = "Hittade ingen strukturerad receptdata. Peka ut det du vill spara nedan. Du kan fylla i receptet för hand istället.";
         statusEl.className = "status-line ok";
       }
     }
