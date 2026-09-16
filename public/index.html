@@ -2559,7 +2559,7 @@ document.getElementById("fetchBtn").addEventListener("click", async () => {
         statusEl.className = "status-line err";
         statusEl.textContent = "Kan inte hämta receptinnehållet på sidan. Vill du ändå spara det här receptet kan du fylla i det för hand.";
       } else {
-        statusEl.textContent = "Hittade ingen strukturerad receptdata. Peka ut det du vill spara nedan. Du kan fylla i receptet för hand istället.";
+        statusEl.innerHTML = "Hittade ingen strukturerad receptdata. Peka ut det du vill spara nedan.<br>Saknas receptdata kan du fylla i receptet för hand istället.";
         statusEl.className = "status-line ok";
       }
     }
