@@ -136,6 +136,19 @@
   .shopping-preview-list .item-source{
     font-size: 0.76rem; color: var(--ink-soft); font-style: italic; display:block;
   }
+  .existing-items-list{
+    list-style:none; margin:0; padding:0;
+    max-height: 150px; overflow-y: auto;
+    border: 1px solid var(--line); border-radius: 3px;
+  }
+  .existing-items-list li{
+    padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--line);
+    font-size: 0.85rem; color: var(--ink-soft);
+  }
+  .existing-items-list li:last-child{ border-bottom: none; }
+  .existing-items-list .item-source{
+    font-size: 0.72rem; font-style: italic; display:block;
+  }
   .category-section{ margin-bottom: 2.2rem; }
   .category-section-heading{
     display:flex; justify-content:space-between; align-items:baseline;
@@ -397,6 +410,11 @@
   }
   .type-toggle{ display:flex; gap:1rem; font-size: 0.9rem; color: var(--ink-soft); }
   .type-toggle label{ display:flex; align-items:center; gap:0.35rem; cursor:pointer; }
+  .panel-subheading{
+    font-size: 1.05rem; font-style: italic; font-weight: 600;
+    margin: 0 0 0.8rem; padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--line);
+  }
   .share-panel{ margin-top: 2rem; }
   .share-panel h3{
     font-size: 0.85rem; color: var(--copper-dark); margin-bottom: 0.6rem;
@@ -496,7 +514,7 @@
         Visa underkategorier
       </label>
       <div class="toolbar-actions">
-        <button class="btn-outline" id="viewPlansBtn" type="button">Mina listor</button>
+        <button class="btn-outline" id="viewPlansBtn" type="button">Mina matplaner</button>
         <button class="btn-outline" id="viewShoppingListsBtn" type="button">Inköpslistor</button>
         <button class="btn-outline" id="selectModeBtn" type="button">Välj recept</button>
         <button class="btn-primary" id="newRecipeBtn" type="button" disabled>Ansluter…</button>
@@ -504,17 +522,17 @@
     </div>
     <div class="panel" id="selectionBar" hidden>
       <div class="selection-bar-top">
-        <span id="selectionCount"></span>
         <div class="type-toggle">
-          <label><input type="radio" name="selectionTargetType" value="plan" id="selectionTypePlan" checked> Lista</label>
+          <label><input type="radio" name="selectionTargetType" value="plan" id="selectionTypePlan" checked> Matplan</label>
           <label><input type="radio" name="selectionTargetType" value="shopping" id="selectionTypeShopping"> Inköpslista</label>
         </div>
+        <span id="selectionCount"></span>
       </div>
       <select id="selectionListSelect">
-        <option value="">+ Ny lista (ange namn nedan)</option>
+        <option value="">+ Ny matplan (ange namn nedan)</option>
       </select>
-      <input type="text" id="selectionNewListName" placeholder="Namn på ny lista" style="margin-top:0.5rem;">
-      <p class="hint" id="selectionNewListHint" style="margin-top:0.4rem;">Ingen lista vald – skriv ett namn ovan för att skapa en ny, eller välj en befintlig lista.</p>
+      <input type="text" id="selectionNewListName" placeholder="Namn på ny matplan" style="margin-top:0.5rem;">
+      <p class="hint" id="selectionNewListHint" style="margin-top:0.4rem;">Ingen matplan vald – skriv ett namn ovan för att skapa en ny, eller välj en befintlig.</p>
       <div class="selection-bar" style="margin-top:0.8rem;">
         <button class="btn-primary" id="addSelectionBtn" type="button">Lägg till</button>
         <button class="btn-quiet" id="cancelSelectionBtn" type="button">Avbryt</button>
@@ -534,23 +552,23 @@
   <section id="view-plans" hidden>
     <a href="#" class="back-link" id="backFromPlans">← Alla recept</a>
     <div class="toolbar">
-      <h1 class="detail-title" style="flex:1; font-size:1.3rem;">Mina listor</h1>
-      <button class="btn-primary" id="newPlanBtn" type="button">+ Ny lista</button>
+      <h1 class="detail-title" style="flex:1; font-size:1.3rem;">Mina matplaner</h1>
+      <button class="btn-primary" id="newPlanBtn" type="button">+ Ny matplan</button>
     </div>
     <div id="plansContainer"></div>
     <div class="empty-state" id="plansEmptyState" hidden>
-      <p>Inga listor än.</p>
+      <p>Inga matplaner än.</p>
       <p>Skapa en t.ex. för en veckomeny eller en bjudning.</p>
     </div>
   </section>
 
   <!-- PLAN DETAIL VIEW -->
   <section id="view-plan-detail" hidden>
-    <a href="#" class="back-link" id="backFromPlanDetail">← Mina listor</a>
+    <a href="#" class="back-link" id="backFromPlanDetail">← Mina matplaner</a>
     <div class="toolbar">
       <h1 class="detail-title" id="planTitle" style="flex:1; font-size:1.3rem;"></h1>
       <button class="btn-outline" id="planToShoppingListBtn" type="button">Lägg till ingredienser i inköpslista</button>
-      <button class="btn-outline btn-danger" id="deletePlanBtn" type="button">Ta bort lista</button>
+      <button class="btn-outline btn-danger" id="deletePlanBtn" type="button">Ta bort matplan</button>
     </div>
     <div class="panel" id="planShoppingPanel" hidden>
       <p class="hint" style="margin-top:0;">Bocka ur det du inte vill ha med:</p>
@@ -564,10 +582,14 @@
         <button class="btn-primary" id="planShoppingConfirmBtn" type="button">Lägg till</button>
         <span class="status-line" id="planShoppingStatus"></span>
       </div>
+      <div id="planShoppingExisting" hidden style="margin-top:0.8rem;">
+        <p class="hint" style="margin-top:0;">Redan i listan:</p>
+        <ul class="existing-items-list" id="planShoppingExistingList"></ul>
+      </div>
     </div>
     <div class="grid" id="planRecipeGrid"></div>
     <div class="empty-state" id="planEmptyState" hidden>
-      <p>Inga recept i listan än.</p>
+      <p>Inga recept i matplanen än.</p>
       <p>Gå till receptlistan, klicka "Välj recept", markera recept och lägg till dem här.</p>
     </div>
   </section>
@@ -679,19 +701,21 @@
     <a href="#" class="back-link no-print" id="backFromDetail">← Alla recept</a>
     <div class="no-print" style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:1.2rem;">
       <button class="btn-outline" id="printBtn" type="button">Skriv ut recept</button>
-      <button class="btn-outline" id="addToListBtn" type="button">Lägg till i lista</button>
+      <button class="btn-outline" id="addToListBtn" type="button">Lägg till i matplan</button>
       <button class="btn-outline" id="recipeToShoppingListBtn" type="button">Lägg till i inköpslista</button>
     </div>
     <div class="panel selection-bar no-print" id="addToListPanel" hidden>
+      <h3 class="panel-subheading">Lägg till i matplan</h3>
       <select id="addToListSelect">
-        <option value="">Välj lista…</option>
-        <option value="__new__">+ Ny lista…</option>
+        <option value="">Välj matplan…</option>
+        <option value="__new__">+ Ny matplan…</option>
       </select>
-      <input type="text" id="addToListNewName" placeholder="Namn på ny lista" hidden>
+      <input type="text" id="addToListNewName" placeholder="Namn på ny matplan" hidden>
       <button class="btn-primary" id="addToListConfirmBtn" type="button">Lägg till</button>
       <span class="status-line" id="addToListStatus"></span>
     </div>
     <div class="panel no-print" id="recipeShoppingPanel" hidden>
+      <h3 class="panel-subheading">Lägg till i inköpslista</h3>
       <p class="hint" style="margin-top:0;">Bocka ur det du inte vill ha med:</p>
       <ul class="shopping-preview-list" id="recipeShoppingPreviewList"></ul>
       <div class="selection-bar" style="margin-top:0.8rem;">
@@ -702,6 +726,10 @@
         <input type="text" id="recipeShoppingNewName" placeholder="Namn på ny inköpslista" hidden>
         <button class="btn-primary" id="recipeShoppingConfirmBtn" type="button">Lägg till</button>
         <span class="status-line" id="recipeShoppingStatus"></span>
+      </div>
+      <div id="recipeShoppingExisting" hidden style="margin-top:0.8rem;">
+        <p class="hint" style="margin-top:0;">Redan i listan:</p>
+        <ul class="existing-items-list" id="recipeShoppingExistingList"></ul>
       </div>
     </div>
     <img class="detail-image" id="dImage" alt="" hidden>
@@ -1197,7 +1225,7 @@ function renderPlanDetail(id){
     removeBtn.type = "button";
     removeBtn.className = "btn-quiet";
     removeBtn.style.cssText = "display:block;margin-top:0.3rem;font-size:0.78rem;";
-    removeBtn.textContent = "Ta bort från listan";
+    removeBtn.textContent = "Ta bort från matplanen";
     removeBtn.addEventListener("click", async (e) => {
       e.stopPropagation();
       await removeRecipeFromPlan(id, r.id);
@@ -1216,7 +1244,7 @@ document.getElementById("backFromPlans").addEventListener("click", (e) => {
   showView("list");
 });
 document.getElementById("newPlanBtn").addEventListener("click", async () => {
-  const name = prompt('Namn på listan (t.ex. "Veckomeny v.38" eller "Kalas för Anna"):');
+  const name = prompt('Namn på matplanen (t.ex. "Veckomeny v.38" eller "Kalas för Anna"):');
   if(!name || !name.trim()) return;
   const id = await createPlan(name.trim());
   currentPlanId = id;
@@ -1231,7 +1259,7 @@ document.getElementById("backFromPlanDetail").addEventListener("click", (e) => {
 });
 document.getElementById("deletePlanBtn").addEventListener("click", async () => {
   if(!currentPlanId) return;
-  if(confirm("Ta bort den här listan? (Recepten i den påverkas inte.)")){
+  if(confirm("Ta bort den här matplanen? (Recepten i den påverkas inte.)")){
     await deletePlan(currentPlanId);
     currentPlanId = null;
     showView("plans");
@@ -1265,6 +1293,37 @@ function renderShoppingPreview(listElId, items){
   });
 }
 
+function renderExistingShoppingItems(selectId, wrapId, listId){
+  const select = document.getElementById(selectId);
+  const wrap = document.getElementById(wrapId);
+  const ul = document.getElementById(listId);
+  const value = select.value;
+  ul.innerHTML = "";
+
+  if(!value || value === "__new__"){
+    wrap.hidden = true;
+    return;
+  }
+  const list = shoppingListsCache.find(l => l.id === value);
+  const items = (list && Array.isArray(list.items)) ? list.items : [];
+  if(!items.length){
+    wrap.hidden = true;
+    return;
+  }
+  items.forEach(item => {
+    const li = document.createElement("li");
+    li.textContent = item.text;
+    if(item.source){
+      const src = document.createElement("span");
+      src.className = "item-source";
+      src.textContent = "från: " + item.source;
+      li.appendChild(src);
+    }
+    ul.appendChild(li);
+  });
+  wrap.hidden = false;
+}
+
 function getCheckedPreviewItems(listElId, items){
   const ul = document.getElementById(listElId);
   const checkedIds = new Set(
@@ -1286,11 +1345,13 @@ document.getElementById("planToShoppingListBtn").addEventListener("click", () =>
     planShoppingPreviewItems = plan ? collectShoppingItemsFromPlan(plan) : [];
     renderShoppingPreview("planShoppingPreviewList", planShoppingPreviewItems);
     populateShoppingListSelect(document.getElementById("planShoppingSelect"));
+    renderExistingShoppingItems("planShoppingSelect", "planShoppingExisting", "planShoppingExistingList");
     document.getElementById("planShoppingStatus").textContent = "";
   }
 });
 document.getElementById("planShoppingSelect").addEventListener("change", (e) => {
   document.getElementById("planShoppingNewName").hidden = e.target.value !== "__new__";
+  renderExistingShoppingItems("planShoppingSelect", "planShoppingExisting", "planShoppingExistingList");
 });
 document.getElementById("planShoppingConfirmBtn").addEventListener("click", async () => {
   const select = document.getElementById("planShoppingSelect");
@@ -1688,14 +1749,18 @@ function updateSelectionNewNameVisibility(){
   const select = document.getElementById("selectionListSelect");
   const isNew = select.value === "";
   document.getElementById("selectionNewListName").hidden = !isNew;
-  document.getElementById("selectionNewListHint").hidden = !isNew;
+  const hint = document.getElementById("selectionNewListHint");
+  hint.hidden = !isNew;
+  const noun = getSelectionTargetType() === "shopping" ? "inköpslista" : "matplan";
+  hint.textContent = "Ingen " + noun + " vald – skriv ett namn ovan för att skapa en ny, eller välj en befintlig.";
 }
 
 function populateSelectionListSelect(){
   const select = document.getElementById("selectionListSelect");
   const type = getSelectionTargetType();
   const previous = select.value;
-  select.innerHTML = '<option value="">+ Ny lista (ange namn nedan)</option>';
+  const newLabel = type === "shopping" ? "+ Ny inköpslista (ange namn nedan)" : "+ Ny matplan (ange namn nedan)";
+  select.innerHTML = '<option value="">' + newLabel + '</option>';
   const items = type === "shopping" ? shoppingListsCache : plansCache;
   items.forEach(item => {
     const opt = document.createElement("option");
@@ -1708,13 +1773,13 @@ function populateSelectionListSelect(){
   });
   if(Array.from(select.options).some(o => o.value === previous)) select.value = previous;
   document.getElementById("selectionNewListName").placeholder =
-    type === "shopping" ? "Namn på ny inköpslista" : "Namn på ny lista";
+    type === "shopping" ? "Namn på ny inköpslista" : "Namn på ny matplan";
   updateSelectionNewNameVisibility();
 }
 
 function populatePlanSelect(select){
   const previous = select.value;
-  select.innerHTML = '<option value="">Välj lista…</option>';
+  select.innerHTML = '<option value="">Välj matplan…</option>';
   plansCache.forEach(p => {
     const opt = document.createElement("option");
     opt.value = p.id;
@@ -1723,7 +1788,7 @@ function populatePlanSelect(select){
   });
   const newOpt = document.createElement("option");
   newOpt.value = "__new__";
-  newOpt.textContent = "+ Ny lista…";
+  newOpt.textContent = "+ Ny matplan…";
   select.appendChild(newOpt);
   if(Array.from(select.options).some(o => o.value === previous)) select.value = previous;
 }
@@ -1765,7 +1830,7 @@ document.getElementById("addSelectionBtn").addEventListener("click", async () =>
     const name = document.getElementById("selectionNewListName").value.trim();
     if(!name){
       statusEl.className = "status-line err";
-      statusEl.textContent = "Skriv ett namn för att skapa en ny lista, eller välj en befintlig ovan.";
+      statusEl.textContent = "Skriv ett namn för att skapa en ny matplan eller inköpslista, eller välj en befintlig ovan.";
       return;
     }
   }
@@ -2196,8 +2261,10 @@ document.getElementById("printBtn").addEventListener("click", () => {
 
 document.getElementById("addToListBtn").addEventListener("click", () => {
   const panel = document.getElementById("addToListPanel");
-  panel.hidden = !panel.hidden;
-  if(!panel.hidden){
+  const willShow = panel.hidden;
+  document.getElementById("recipeShoppingPanel").hidden = true;
+  panel.hidden = !willShow;
+  if(willShow){
     populatePlanSelect(document.getElementById("addToListSelect"));
     document.getElementById("addToListStatus").textContent = "";
   }
@@ -2214,7 +2281,7 @@ document.getElementById("addToListConfirmBtn").addEventListener("click", async (
   let planId = select.value;
   if(!planId){
     statusEl.className = "status-line err";
-    statusEl.textContent = "Välj eller skapa en lista först.";
+    statusEl.textContent = "Välj eller skapa en matplan först.";
     return;
   }
   if(!currentDetailId) return;
@@ -2224,7 +2291,7 @@ document.getElementById("addToListConfirmBtn").addEventListener("click", async (
       const name = document.getElementById("addToListNewName").value.trim();
       if(!name){
         statusEl.className = "status-line err";
-        statusEl.textContent = "Ange ett namn på listan.";
+        statusEl.textContent = "Ange ett namn på matplanen.";
         btn.disabled = false;
         return;
       }
@@ -2232,7 +2299,7 @@ document.getElementById("addToListConfirmBtn").addEventListener("click", async (
     }
     await addRecipesToPlan(planId, [currentDetailId]);
     statusEl.className = "status-line ok";
-    statusEl.textContent = "Tillagt i listan.";
+    statusEl.textContent = "Tillagt i matplanen.";
     document.getElementById("addToListNewName").value = "";
     document.getElementById("addToListNewName").hidden = true;
     select.value = "";
@@ -2248,16 +2315,20 @@ let recipeShoppingPreviewItems = [];
 
 document.getElementById("recipeToShoppingListBtn").addEventListener("click", () => {
   const panel = document.getElementById("recipeShoppingPanel");
-  panel.hidden = !panel.hidden;
-  if(!panel.hidden){
+  const willShow = panel.hidden;
+  document.getElementById("addToListPanel").hidden = true;
+  panel.hidden = !willShow;
+  if(willShow){
     recipeShoppingPreviewItems = currentDetailRecipe ? ingredientsAsShoppingItems(currentDetailRecipe) : [];
     renderShoppingPreview("recipeShoppingPreviewList", recipeShoppingPreviewItems);
     populateShoppingListSelect(document.getElementById("recipeShoppingSelect"));
+    renderExistingShoppingItems("recipeShoppingSelect", "recipeShoppingExisting", "recipeShoppingExistingList");
     document.getElementById("recipeShoppingStatus").textContent = "";
   }
 });
 document.getElementById("recipeShoppingSelect").addEventListener("change", (e) => {
   document.getElementById("recipeShoppingNewName").hidden = e.target.value !== "__new__";
+  renderExistingShoppingItems("recipeShoppingSelect", "recipeShoppingExisting", "recipeShoppingExistingList");
 });
 document.getElementById("recipeShoppingConfirmBtn").addEventListener("click", async () => {
   const select = document.getElementById("recipeShoppingSelect");
