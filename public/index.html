@@ -204,6 +204,7 @@
     gap: 1rem;
   }
   .card{
+    position: relative;
     background: var(--paper-raised);
     border: 1px solid var(--line);
     border-radius: 4px;
@@ -379,6 +380,23 @@
   .rating-clear{
     display:block; font-size: 0.78rem; color: var(--ink-soft);
     text-decoration: underline; margin-top: 0.2rem;
+  }
+  .tried-toggle{
+    display:inline-flex; align-items:center; gap:0.4rem;
+    font-size: 0.85rem; padding: 0.3rem 0.8rem;
+    border: 1px solid var(--line); border-radius: 999px;
+    color: var(--ink-soft); background: var(--paper-raised);
+  }
+  .tried-toggle.is-tried{
+    border-color: var(--copper); color: var(--copper-dark); background: #FBF0E8;
+  }
+  .tried-toggle:not(.interactive){ cursor: default; }
+  .card .tried-badge{
+    position:absolute; top:0.5rem; right:0.5rem;
+    width:24px; height:24px; border-radius:50%;
+    background: var(--copper); color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    font-size: 0.85rem; box-shadow: 0 1px 3px rgba(0,0,0,0.25);
   }
   .card .rating-badge{
     padding: 0 0.7rem 0.7rem;
@@ -745,6 +763,7 @@
       <button type="button" class="btn-quiet" id="scaleResetBtn">Återställ</button>
     </div>
     <div class="rating" id="dRating"></div>
+    <button type="button" class="tried-toggle" id="triedToggle" style="margin-bottom:1.2rem;"></button>
     <div class="owner-note" id="dOwnerNote" hidden></div>
     <button class="btn-quiet no-print" id="hideSharedBtn" type="button" style="display:block; margin-bottom:1.2rem;" hidden>Dölj från min lista</button>
     <div class="detail-source" id="dSource"></div>
@@ -784,13 +803,12 @@
    och klistra in din config nedan.
    ========================================================= */
 const firebaseConfig = {
-  apiKey: "AIzaSyDIUjhs_4E9Ddw_77sj1bwleHartaLKCBY",
-  authDomain: "myrecepies-410f0.firebaseapp.com",
-  projectId: "myrecepies-410f0",
-  storageBucket: "myrecepies-410f0.firebasestorage.app",
-  messagingSenderId: "967438531951",
-  appId: "1:967438531951:web:5fbd7321ed1da48c43fc9a",
-  measurementId: "G-PX7JCKMVRP"
+  apiKey: "DIN_API_KEY",
+  authDomain: "DITT_PROJEKT.firebaseapp.com",
+  projectId: "DITT_PROJEKT",
+  storageBucket: "DITT_PROJEKT.appspot.com",
+  messagingSenderId: "…",
+  appId: "…"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -986,6 +1004,10 @@ async function deleteRecipe(id){
 
 async function setRating(id, value){
   await recipesCollection().doc(id).update({ rating: value });
+}
+
+async function setTried(id, value){
+  await recipesCollection().doc(id).update({ tried: value });
 }
 
 async function addShare(id, email){
@@ -1686,6 +1708,12 @@ function buildCard(r){
     check.className = "select-check";
     check.textContent = "✓";
     card.appendChild(check);
+  } else if(r.tried){
+    const triedBadge = document.createElement("div");
+    triedBadge.className = "tried-badge";
+    triedBadge.title = "Provad";
+    triedBadge.textContent = "✓";
+    card.appendChild(triedBadge);
   }
 
   if(r.image){
@@ -2095,6 +2123,7 @@ function openDetail(id){
     renderShareList(r);
   }
   renderRatingWidget(r, isOwner);
+  renderTriedToggle(r, isOwner);
 
   const srcEl = document.getElementById("dSource");
   if(r.sourceUrl){
@@ -2416,6 +2445,33 @@ function renderRatingWidget(recipe, interactive){
   }
 }
 
+function renderTriedToggle(recipe, interactive){
+  const btn = document.getElementById("triedToggle");
+  const isTried = !!recipe.tried;
+
+  btn.className = "tried-toggle" + (isTried ? " is-tried" : "") + (interactive ? " interactive" : "");
+  btn.textContent = isTried ? "✓ Provad" : "Markera som provad";
+
+  if(!interactive && !isTried){
+    btn.hidden = true;
+    return;
+  }
+  btn.hidden = false;
+
+  if(!interactive){
+    btn.disabled = true;
+    btn.onclick = null;
+    return;
+  }
+
+  btn.disabled = false;
+  btn.onclick = async () => {
+    const newValue = !recipe.tried;
+    await setTried(currentDetailId, newValue);
+    recipe.tried = newValue;
+    renderTriedToggle(recipe, interactive);
+  };
+}
 
 function renderShareList(recipe){
   const list = document.getElementById("shareList");
