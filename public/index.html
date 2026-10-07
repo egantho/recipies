@@ -334,6 +334,13 @@
     border-radius: 5px; margin-bottom: 1.2rem;
     background: var(--paper-raised); border: 1px solid var(--line);
   }
+  .video-embed{
+    position:relative; width:100%; padding-top:56.25%;
+    margin-bottom: 1.2rem; border-radius: 5px; overflow:hidden; background:#000;
+  }
+  .video-embed iframe{
+    position:absolute; top:0; left:0; width:100%; height:100%; border:0;
+  }
   .detail-title{ font-size: 1.7rem; font-style: italic; margin-bottom: 0.3rem; }
   .detail-source{ font-size: 0.85rem; color: var(--ink-soft); margin-bottom: 1.4rem; }
   .detail-source a{ color: var(--ink-soft); }
@@ -749,6 +756,11 @@
         <p class="hint" style="margin-top:0;">Redan i listan:</p>
         <ul class="existing-items-list" id="recipeShoppingExistingList"></ul>
       </div>
+    </div>
+    <div class="video-embed no-print" id="dVideoEmbed" hidden>
+      <iframe id="dVideoIframe" src="" title="Recept-video" frameborder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen></iframe>
     </div>
     <img class="detail-image" id="dImage" alt="" hidden>
     <h1 class="detail-title" id="dTitle"></h1>
@@ -2129,7 +2141,17 @@ function openDetail(id){
   document.getElementById("recipeShoppingStatus").textContent = "";
 
   const img = document.getElementById("dImage");
-  if(r.image){ img.src = r.image; img.hidden = false; } else { img.hidden = true; }
+  const videoWrap = document.getElementById("dVideoEmbed");
+  const videoIframe = document.getElementById("dVideoIframe");
+  if(r.videoId){
+    videoWrap.hidden = false;
+    videoIframe.src = "https://www.youtube-nocookie.com/embed/" + r.videoId;
+    img.hidden = true;
+  } else {
+    videoWrap.hidden = true;
+    videoIframe.src = "";
+    if(r.image){ img.src = r.image; img.hidden = false; } else { img.hidden = true; }
+  }
 
   document.getElementById("dTitle").textContent = r.title || "Namnlöst recept";
   document.getElementById("dCategory").textContent = categoryDisplayFull(r.category);
@@ -2642,6 +2664,7 @@ document.getElementById("shareAddBtn").addEventListener("click", async () => {
 /* ---------- Add view: reset ---------- */
 let editingRecipeId = null;
 let fetchedSourceUrl = "";
+let fetchedVideoId = "";
 let chosenImageDataUrl = "";
 
 function resetAddView(){
@@ -2667,6 +2690,7 @@ function resetAddView(){
   document.getElementById("fInstructions").value = "";
   document.getElementById("saveStatus").textContent = "";
   fetchedSourceUrl = "";
+  fetchedVideoId = "";
   chosenImageDataUrl = "";
 }
 
@@ -2687,6 +2711,7 @@ function openEditor(id){
   document.getElementById("fIngredients").value = Array.isArray(r.ingredients) ? r.ingredients.join("\n") : "";
   document.getElementById("fInstructions").value = r.instructions || "";
   fetchedSourceUrl = r.sourceUrl || "";
+  fetchedVideoId = r.videoId || "";
 
   if(r.image){
     if(r.image.startsWith("data:")){
@@ -2861,15 +2886,132 @@ async function toResizedDataUrl(blob, maxWidth){
   });
 }
 
+/* ---------- YouTube-recept ---------- */
+function getYoutubeVideoId(url){
+  try{
+    const u = new URL(url);
+    if(u.hostname.replace(/^www\./, "") === "youtu.be"){
+      return u.pathname.slice(1).split("/")[0] || null;
+    }
+    const host = u.hostname.replace(/^www\.|^m\./, "");
+    if(host === "youtube.com" || host === "youtube-nocookie.com"){
+      if(u.pathname === "/watch") return u.searchParams.get("v");
+      if(u.pathname.startsWith("/shorts/")) return u.pathname.split("/")[2] || null;
+      if(u.pathname.startsWith("/embed/")) return u.pathname.split("/")[2] || null;
+    }
+  }catch(e){}
+  return null;
+}
+
+// Extracts a balanced {...} JSON object that appears right after `marker` in
+// a block of HTML/JS text, handling nested braces and quoted strings safely.
+function extractJsonObjectAfter(text, marker){
+  const idx = text.indexOf(marker);
+  if(idx === -1) return null;
+  const start = text.indexOf("{", idx);
+  if(start === -1) return null;
+
+  let depth = 0, inString = false, stringChar = "", escaped = false;
+  for(let i = start; i < text.length; i++){
+    const ch = text[i];
+    if(inString){
+      if(escaped){ escaped = false; }
+      else if(ch === "\\"){ escaped = true; }
+      else if(ch === stringChar){ inString = false; }
+      continue;
+    }
+    if(ch === '"' || ch === "'"){ inString = true; stringChar = ch; continue; }
+    if(ch === "{") depth++;
+    else if(ch === "}"){
+      depth--;
+      if(depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+async function fetchYoutubeRecipeData(url, videoId){
+  const html = await fetchTextViaProxy(url);
+  const jsonText = extractJsonObjectAfter(html, "ytInitialPlayerResponse");
+  if(!jsonText) return null;
+
+  let data;
+  try{ data = JSON.parse(jsonText); }catch(e){ return null; }
+
+  const details = data.videoDetails || {};
+  const description = (details.shortDescription || "").trim();
+  const title = details.title || "";
+  const thumbs = (details.thumbnail && details.thumbnail.thumbnails) || [];
+  const bestThumb = thumbs.length ? thumbs[thumbs.length - 1].url : "";
+
+  return { videoId, title, description, thumbnailUrl: bestThumb };
+}
+
+// Reuses the quantity-detection logic from portionsskalningen to guess
+// which description lines are ingredients vs. plain instructions/text.
+function splitDescriptionIntoIngredientsAndText(description){
+  const lines = description.split("\n").map(l => l.trim());
+  const ingredients = [];
+  const otherLines = [];
+  lines.forEach(line => {
+    if(line && parseLeadingQuantity(line)){
+      ingredients.push(line);
+    } else {
+      otherLines.push(line);
+    }
+  });
+  return { ingredients, instructions: otherLines.join("\n").replace(/\n{3,}/g, "\n\n").trim() };
+}
+
 document.getElementById("fetchBtn").addEventListener("click", async () => {
   const url = document.getElementById("urlInput").value.trim();
   const statusEl = document.getElementById("fetchStatus");
   if(!url){ statusEl.textContent = "Ange en länk först."; statusEl.className = "status-line err"; return; }
 
   statusEl.className = "status-line ok";
-  statusEl.innerHTML = "<span class=\"loader\"></span>Hämtar sidan…";
   document.getElementById("fetchGenericHint").hidden = true;
   document.getElementById("pickerPanel").hidden = true;
+
+  const youtubeVideoId = getYoutubeVideoId(url);
+  if(youtubeVideoId){
+    statusEl.innerHTML = "<span class=\"loader\"></span>Hämtar video…";
+    try{
+      const ytData = await fetchYoutubeRecipeData(url, youtubeVideoId);
+      if(!ytData){
+        statusEl.className = "status-line err";
+        statusEl.textContent = "Kunde inte läsa av videons information. Fyll i receptet för hand nedan.";
+        return;
+      }
+      fetchedSourceUrl = url;
+      fetchedVideoId = youtubeVideoId;
+      document.getElementById("fTitle").value = ytData.title;
+
+      const split = splitDescriptionIntoIngredientsAndText(ytData.description);
+      document.getElementById("fIngredients").value = split.ingredients.join("\n");
+      document.getElementById("fInstructions").value = split.instructions;
+
+      if(ytData.thumbnailUrl){
+        try{
+          const blob = await fetchBlobViaProxy(ytData.thumbnailUrl);
+          chosenImageDataUrl = await toResizedDataUrl(blob, 900);
+          showImagePreview(chosenImageDataUrl);
+        }catch(e){
+          document.getElementById("fImageUrl").value = ytData.thumbnailUrl;
+        }
+      }
+      statusEl.className = "status-line ok";
+      statusEl.textContent = split.ingredients.length
+        ? "Hämtade videon. Ingredienser gissades utifrån beskrivningen – kolla igenom och redigera vid behov."
+        : "Hämtade videon, men hittade inga rader som liknade ingredienser i beskrivningen. Fyll i dem för hand.";
+    }catch(err){
+      console.error(err);
+      statusEl.className = "status-line err";
+      statusEl.textContent = "Kunde inte hämta videon (" + err.message + "). Fyll i för hand nedan.";
+    }
+    return;
+  }
+
+  statusEl.innerHTML = "<span class=\"loader\"></span>Hämtar sidan…";
 
   try{
     const html = await fetchTextViaProxy(url);
@@ -3097,7 +3239,8 @@ document.getElementById("recipeForm").addEventListener("submit", async (e) => {
       image,
       ingredients,
       instructions,
-      sourceUrl: fetchedSourceUrl || ""
+      sourceUrl: fetchedSourceUrl || "",
+      videoId: fetchedVideoId || ""
     };
     if(editingRecipeId){
       await updateRecipe(editingRecipeId, payload);
