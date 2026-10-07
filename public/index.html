@@ -768,7 +768,7 @@
     <div class="owner-note" id="dReceivedFrom" hidden></div>
     <div class="no-print" style="display:flex; align-items:center; gap:0.8rem; margin-bottom:1.2rem;">
       <button class="btn-outline" id="saveSharedCopyBtn" type="button" hidden>Spara i min receptsamling</button>
-      <button class="btn-quiet" id="hideSharedBtn" type="button" hidden>Dölj från min lista</button>
+      <button class="btn-quiet" id="hideSharedBtn" type="button" hidden>Ta bort från delade recept</button>
       <span class="status-line" id="saveSharedCopyStatus"></span>
     </div>
     <div class="detail-source" id="dSource"></div>
@@ -2330,6 +2330,11 @@ document.getElementById("deleteBtn").addEventListener("click", async () => {
 
 document.getElementById("hideSharedBtn").addEventListener("click", async () => {
   if(!currentDetailId) return;
+  const proceed = confirm(
+    "Om du vill ha kvar receptet behöver du spara en egen kopia av det (knappen \"Spara i min receptsamling\") innan du tar bort det här.\n\n" +
+    "Är du säker på att du vill ta bort det från dina delade recept?"
+  );
+  if(!proceed) return;
   await hideSharedRecipe(currentDetailId);
   showView("list");
 });
@@ -2354,11 +2359,12 @@ document.getElementById("saveSharedCopyBtn").addEventListener("click", async () 
       sourceUrl: recipe.sourceUrl || "",
       receivedFrom: recipe.ownerEmail || ""
     });
-    statusEl.textContent = "Sparat i din egen receptsamling!";
+    await hideSharedRecipe(currentDetailId);
+    statusEl.textContent = "Sparat i din egen receptsamling! Går tillbaka till listan…";
+    setTimeout(() => showView("list"), 900);
   }catch(err){
     statusEl.className = "status-line err";
     statusEl.textContent = "Kunde inte spara: " + err.message;
-  }finally{
     btn.disabled = false;
   }
 });
