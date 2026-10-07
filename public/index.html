@@ -2947,10 +2947,52 @@ async function fetchYoutubeRecipeData(url, videoId){
   return { videoId, title, description, thumbnailUrl: bestThumb };
 }
 
+// Common standalone "credits" labels seen in video descriptions (crew,
+// sponsors, etc.) — once one of these shows up, everything after it is
+// discarded since it's never part of the recipe itself.
+const CREDITS_MARKERS = [
+  "fotografer", "fotograf", "foto", "grafisk form", "redigering", "klippning",
+  "producenter", "producent", "exekutiv producent", "regissör", "regi",
+  "ljud", "musik", "sponsorer", "sponsor", "samarbete", "medverkande",
+  "photographer", "photography", "graphic design", "editing", "editor",
+  "producer", "executive producer", "director", "music", "sound", "crew", "credits"
+];
+
+function isCreditsMarkerLine(line){
+  const normalized = line.trim().toLowerCase().replace(/:$/, "");
+  return CREDITS_MARKERS.includes(normalized);
+}
+
+function isBareUrlLine(line){
+  return /^(https?:\/\/|www\.)\S+$/i.test(line.trim());
+}
+
 // Reuses the quantity-detection logic from portionsskalningen to guess
-// which description lines are ingredients vs. plain instructions/text.
+// which description lines are ingredients vs. plain instructions/text,
+// while trimming away intro text, credits and bare links that commonly
+// clutter video descriptions.
 function splitDescriptionIntoIngredientsAndText(description){
-  const lines = description.split("\n").map(l => l.trim());
+  let lines = description.split("\n").map(l => l.trim());
+  let portions = "";
+
+  // Drop any intro/story text before an "Ingredienser"/"Ingredients" heading,
+  // and pull out a portion count from it if one is written there.
+  const headingIndex = lines.findIndex(l => /^ingrediens(er)?\b/i.test(l) || /^ingredients\b/i.test(l));
+  if(headingIndex !== -1){
+    const headingMatch = lines[headingIndex].match(/(\d+)\s*(?:pers(?:oner)?|portioner|port\b)/i);
+    if(headingMatch) portions = headingMatch[1];
+    lines = lines.slice(headingIndex + 1);
+  }
+
+  // Cut off everything from a credits section onward.
+  const creditsIndex = lines.findIndex(isCreditsMarkerLine);
+  if(creditsIndex !== -1){
+    lines = lines.slice(0, creditsIndex);
+  }
+
+  // Strip bare link lines (social media, websites, sponsors) wherever they are.
+  lines = lines.filter(l => !isBareUrlLine(l));
+
   const ingredients = [];
   const otherLines = [];
   lines.forEach(line => {
@@ -2960,7 +3002,11 @@ function splitDescriptionIntoIngredientsAndText(description){
       otherLines.push(line);
     }
   });
-  return { ingredients, instructions: otherLines.join("\n").replace(/\n{3,}/g, "\n\n").trim() };
+  return {
+    ingredients,
+    instructions: otherLines.join("\n").replace(/\n{3,}/g, "\n\n").trim(),
+    portions
+  };
 }
 
 document.getElementById("fetchBtn").addEventListener("click", async () => {
@@ -2989,6 +3035,7 @@ document.getElementById("fetchBtn").addEventListener("click", async () => {
       const split = splitDescriptionIntoIngredientsAndText(ytData.description);
       document.getElementById("fIngredients").value = split.ingredients.join("\n");
       document.getElementById("fInstructions").value = split.instructions;
+      if(split.portions) document.getElementById("fPortions").value = split.portions;
 
       if(ytData.thumbnailUrl){
         try{
