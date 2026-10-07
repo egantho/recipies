@@ -765,7 +765,12 @@
     <div class="rating" id="dRating"></div>
     <button type="button" class="tried-toggle" id="triedToggle" style="margin-bottom:1.2rem;"></button>
     <div class="owner-note" id="dOwnerNote" hidden></div>
-    <button class="btn-quiet no-print" id="hideSharedBtn" type="button" style="display:block; margin-bottom:1.2rem;" hidden>Dölj från min lista</button>
+    <div class="owner-note" id="dReceivedFrom" hidden></div>
+    <div class="no-print" style="display:flex; align-items:center; gap:0.8rem; margin-bottom:1.2rem;">
+      <button class="btn-outline" id="saveSharedCopyBtn" type="button" hidden>Spara i min receptsamling</button>
+      <button class="btn-quiet" id="hideSharedBtn" type="button" hidden>Dölj från min lista</button>
+      <span class="status-line" id="saveSharedCopyStatus"></span>
+    </div>
     <div class="detail-source" id="dSource"></div>
 
     <div class="detail-section" id="dIngredientsWrap">
@@ -803,13 +808,12 @@
    och klistra in din config nedan.
    ========================================================= */
 const firebaseConfig = {
-   apiKey: "AIzaSyDIUjhs_4E9Ddw_77sj1bwleHartaLKCBY",
-  authDomain: "myrecepies-410f0.firebaseapp.com",
-  projectId: "myrecepies-410f0",
-  storageBucket: "myrecepies-410f0.firebasestorage.app",
-  messagingSenderId: "967438531951",
-  appId: "1:967438531951:web:5fbd7321ed1da48c43fc9a",
-  measurementId: "G-PX7JCKMVRP"
+  apiKey: "DIN_API_KEY",
+  authDomain: "DITT_PROJEKT.firebaseapp.com",
+  projectId: "DITT_PROJEKT",
+  storageBucket: "DITT_PROJEKT.appspot.com",
+  messagingSenderId: "…",
+  appId: "…"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -1642,7 +1646,7 @@ function setCategoryFilterValue(value){
   if(!exists){
     const opt = document.createElement("option");
     opt.value = activeCategoryFilter;
-    opt.textContent = categoryDisplay(activeCategoryFilter);
+    opt.textContent = activeCategoryFilter === SHARED_FILTER_KEY ? SHARED_SECTION_NAME : categoryDisplay(activeCategoryFilter);
     select.appendChild(opt);
   }
   select.value = activeCategoryFilter;
@@ -1657,6 +1661,13 @@ function updateCategoryOptions(){
 
   const filterSelect = document.getElementById("categoryFilter");
   filterSelect.innerHTML = '<option value="">Alla kategorier</option>';
+  const hasSharedRecipes = recipesCache.some(r => r.ownerId !== currentUser.uid);
+  if(hasSharedRecipes){
+    const sharedOpt = document.createElement("option");
+    sharedOpt.value = SHARED_FILTER_KEY;
+    sharedOpt.textContent = SHARED_SECTION_NAME;
+    filterSelect.appendChild(sharedOpt);
+  }
   categories.forEach(cat => {
     const opt = document.createElement("option");
     opt.value = cat;
@@ -1733,7 +1744,12 @@ function buildCard(r){
   label.className = "label";
   label.textContent = r.title || "Namnlöst recept";
   card.appendChild(label);
-  if(r.category){
+  if(r.ownerId !== currentUser.uid){
+    const sharedLabel = document.createElement("div");
+    sharedLabel.className = "category";
+    sharedLabel.textContent = "Delat av " + (r.ownerEmail || "okänd");
+    card.appendChild(sharedLabel);
+  } else if(r.category){
     const catLabel = document.createElement("div");
     catLabel.className = "category";
     catLabel.textContent = categoryDisplayFull(r.category);
@@ -1947,7 +1963,11 @@ function renderGrid(){
     if(Array.isArray(r.ingredients) && r.ingredients.some(i => i.toLowerCase().includes(q))) return true;
     return false;
   };
-  const matchesCategory = r => !cat || getCategoryEntries(r.category).some(entry => entry.toLowerCase().includes(cat.toLowerCase()));
+  const matchesCategory = r => {
+    if(!cat) return true;
+    if(cat === SHARED_FILTER_KEY) return r.ownerId !== currentUser.uid;
+    return getCategoryEntries(r.category).some(entry => entry.toLowerCase().includes(cat.toLowerCase()));
+  };
 
   const useGrouped = mode === "" && !q && !cat;
 
@@ -1976,9 +1996,19 @@ function getRecipesPerRow(){
   return Math.max(1, cols);
 }
 
+const SHARED_SECTION_NAME = "Delade recept";
+const SHARED_FILTER_KEY = "__shared__";
+
 function buildCategoryTree(){
   const tree = new Map(); // Map<topLevel, Map<subLabel, recipe[]>>
   recipesCache.forEach(r => {
+    if(r.ownerId !== currentUser.uid){
+      if(!tree.has(SHARED_SECTION_NAME)) tree.set(SHARED_SECTION_NAME, new Map());
+      const sharedMap = tree.get(SHARED_SECTION_NAME);
+      if(!sharedMap.has("")) sharedMap.set("", []);
+      sharedMap.get("").push(r);
+      return;
+    }
     const entries = getCategoryEntries(r.category);
     const effectiveEntries = entries.length ? entries : ["Okategoriserat"];
     effectiveEntries.forEach(entry => {
@@ -2003,6 +2033,8 @@ function renderGroupedByCategory(container){
   const perRow = getRecipesPerRow();
 
   const topNames = Array.from(tree.keys()).sort((a, b) => {
+    if(a === SHARED_SECTION_NAME) return -1;
+    if(b === SHARED_SECTION_NAME) return 1;
     if(a === "Okategoriserat") return 1;
     if(b === "Okategoriserat") return -1;
     return a.localeCompare(b, "sv");
@@ -2028,7 +2060,9 @@ function renderGroupedByCategory(container){
       const showAllBtn = document.createElement("button");
       showAllBtn.type = "button";
       showAllBtn.textContent = "Visa alla →";
-      showAllBtn.addEventListener("click", () => jumpToCategory(topName === "Okategoriserat" ? "" : topName));
+      showAllBtn.addEventListener("click", () => jumpToCategory(
+        topName === SHARED_SECTION_NAME ? SHARED_FILTER_KEY : (topName === "Okategoriserat" ? "" : topName)
+      ));
       heading.appendChild(showAllBtn);
     }
     section.appendChild(heading);
@@ -2070,7 +2104,9 @@ function renderGroupedByCategory(container){
         moreBtn.className = "btn-quiet";
         moreBtn.style.cssText = "display:block;margin:-0.5rem 0 1.2rem;font-size:0.8rem;";
         moreBtn.textContent = "Visa alla i " + (subName ? topName + " › " + subName : topName) + " →";
-        moreBtn.addEventListener("click", () => jumpToCategory(subName ? topName + "/" + subName : topName));
+        moreBtn.addEventListener("click", () => jumpToCategory(
+          subName ? topName + "/" + subName : (topName === SHARED_SECTION_NAME ? SHARED_FILTER_KEY : topName)
+        ));
         section.appendChild(moreBtn);
       }
     });
@@ -2112,13 +2148,25 @@ function openDetail(id){
   document.getElementById("sharePanel").hidden = !isOwner;
   const ownerNote = document.getElementById("dOwnerNote");
   const hideBtn = document.getElementById("hideSharedBtn");
+  const saveCopyBtn = document.getElementById("saveSharedCopyBtn");
+  const receivedFromEl = document.getElementById("dReceivedFrom");
+  document.getElementById("saveSharedCopyStatus").textContent = "";
   if(!isOwner){
     ownerNote.hidden = false;
     ownerNote.textContent = "Delat med dig av " + (r.ownerEmail || "en annan användare") + " – du kan läsa men inte ändra.";
     hideBtn.hidden = false;
+    saveCopyBtn.hidden = false;
+    receivedFromEl.hidden = true;
   } else {
     ownerNote.hidden = true;
     hideBtn.hidden = true;
+    saveCopyBtn.hidden = true;
+    if(r.receivedFrom){
+      receivedFromEl.hidden = false;
+      receivedFromEl.textContent = "Du fick det här receptet av " + r.receivedFrom + ".";
+    } else {
+      receivedFromEl.hidden = true;
+    }
   }
   if(isOwner){
     renderShareList(r);
@@ -2283,6 +2331,35 @@ document.getElementById("hideSharedBtn").addEventListener("click", async () => {
   if(!currentDetailId) return;
   await hideSharedRecipe(currentDetailId);
   showView("list");
+});
+
+document.getElementById("saveSharedCopyBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("saveSharedCopyBtn");
+  const statusEl = document.getElementById("saveSharedCopyStatus");
+  const recipe = recipesCache.find(x => x.id === currentDetailId);
+  if(!recipe) return;
+
+  btn.disabled = true;
+  statusEl.className = "status-line ok";
+  statusEl.textContent = "Sparar…";
+  try{
+    await saveRecipe({
+      title: recipe.title || "",
+      category: recipe.category || "",
+      portions: recipe.portions || "",
+      image: recipe.image || "",
+      ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients : [],
+      instructions: recipe.instructions || "",
+      sourceUrl: recipe.sourceUrl || "",
+      receivedFrom: recipe.ownerEmail || ""
+    });
+    statusEl.textContent = "Sparat i din egen receptsamling!";
+  }catch(err){
+    statusEl.className = "status-line err";
+    statusEl.textContent = "Kunde inte spara: " + err.message;
+  }finally{
+    btn.disabled = false;
+  }
 });
 
 document.getElementById("printBtn").addEventListener("click", () => {
