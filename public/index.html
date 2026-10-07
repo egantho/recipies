@@ -2348,6 +2348,7 @@ document.getElementById("saveSharedCopyBtn").addEventListener("click", async () 
   btn.disabled = true;
   statusEl.className = "status-line ok";
   statusEl.textContent = "Sparar…";
+
   try{
     await saveRecipe({
       title: recipe.title || "",
@@ -2359,13 +2360,34 @@ document.getElementById("saveSharedCopyBtn").addEventListener("click", async () 
       sourceUrl: recipe.sourceUrl || "",
       receivedFrom: recipe.ownerEmail || ""
     });
-    await hideSharedRecipe(currentDetailId);
-    statusEl.textContent = "Sparat i din egen receptsamling! Går tillbaka till listan…";
-    setTimeout(() => showView("list"), 900);
   }catch(err){
     statusEl.className = "status-line err";
-    statusEl.textContent = "Kunde inte spara: " + err.message;
+    statusEl.textContent = "Kunde inte spara kopian: " + err.message;
     btn.disabled = false;
+    return;
+  }
+
+  try{
+    await hideSharedRecipe(currentDetailId);
+  }catch(err){
+    statusEl.className = "status-line err";
+    statusEl.textContent = "Receptet sparades, men kunde inte tas bort från Delade recept: " + err.message
+      + " (kontrollera att Firestore-reglerna för \"userPrefs\" är på plats).";
+    btn.disabled = false;
+    return;
+  }
+
+  statusEl.className = "status-line ok";
+  statusEl.textContent = "Sparat i din egen receptsamling.";
+  btn.hidden = true;
+  document.getElementById("hideSharedBtn").hidden = true;
+
+  const closeIt = confirm(
+    "Receptet har lagts till i din egen receptsamling.\n\n" +
+    "Klicka OK för att stänga det och gå tillbaka till listan, eller Avbryt för att fortsätta läsa det."
+  );
+  if(closeIt){
+    showView("list");
   }
 });
 
