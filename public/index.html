@@ -661,7 +661,7 @@
         <button class="btn-outline" id="fetchBtn" type="button">Hämta</button>
       </div>
       <div class="status-line" id="fetchStatus"></div>
-      <p class="hint" id="fetchGenericHint">Fungerar bäst på sidor som taggat sitt recept med strukturerad data. Går det inte automatiskt får du peka ut det du vill spara nedan, eller fylla i för hand.</p>
+      <p class="hint" id="fetchGenericHint">Klistra in en länk till ett recept så försöker appen hämta det åt dig. Fungerar bäst på sidor som taggat sitt recept med strukturerad data, men du kan även klistra in länkar till recept på YouTube. Går det inte automatiskt får du peka ut det du vill spara nedan, eller fylla i för hand.</p>
       <button class="btn-quiet" id="skipFetchBtn" type="button" style="margin-top:0.6rem;">Hoppa över länken, fyll i för hand</button>
 
       <div class="google-search-block">
@@ -712,6 +712,9 @@
 
         <label for="fInstructions">Beskrivning / gör så här</label>
         <textarea id="fInstructions" placeholder="1. Blanda...&#10;2. Grädda..."></textarea>
+
+        <label for="fComment">Kommentar (valfritt)</label>
+        <textarea id="fComment" placeholder="Egna anteckningar, t.ex. ändringar du gjort eller vad du tyckte om receptet..."></textarea>
 
         <div class="form-actions">
           <button class="btn-primary" type="submit" id="saveBtn">Spara recept</button>
@@ -792,6 +795,10 @@
     <div class="detail-section" id="dInstructionsWrap">
       <h3>Gör så här</h3>
       <div class="instructions" id="dInstructions"></div>
+    </div>
+    <div class="detail-section" id="dCommentWrap">
+      <h3>Kommentar</h3>
+      <div class="instructions" id="dComment"></div>
     </div>
 
     <div class="detail-actions no-print" id="dOwnerActions">
@@ -2215,6 +2222,15 @@ function openDetail(id){
     instrWrap.hidden = true;
   }
 
+  const commentWrap = document.getElementById("dCommentWrap");
+  const commentEl = document.getElementById("dComment");
+  if(r.comment && r.comment.trim()){
+    commentEl.textContent = r.comment;
+    commentWrap.hidden = false;
+  } else {
+    commentWrap.hidden = true;
+  }
+
   showView("detail");
 }
 
@@ -2688,6 +2704,7 @@ function resetAddView(){
   document.getElementById("fImagePreview").hidden = true;
   document.getElementById("fIngredients").value = "";
   document.getElementById("fInstructions").value = "";
+  document.getElementById("fComment").value = "";
   document.getElementById("saveStatus").textContent = "";
   fetchedSourceUrl = "";
   fetchedVideoId = "";
@@ -2710,6 +2727,7 @@ function openEditor(id){
   document.getElementById("fPortions").value = r.portions || "";
   document.getElementById("fIngredients").value = Array.isArray(r.ingredients) ? r.ingredients.join("\n") : "";
   document.getElementById("fInstructions").value = r.instructions || "";
+  document.getElementById("fComment").value = r.comment || "";
   fetchedSourceUrl = r.sourceUrl || "";
   fetchedVideoId = r.videoId || "";
 
@@ -3273,6 +3291,7 @@ document.getElementById("recipeForm").addEventListener("submit", async (e) => {
   const ingredients = document.getElementById("fIngredients").value
     .split("\n").map(s => s.trim()).filter(Boolean);
   const instructions = document.getElementById("fInstructions").value.trim();
+  const comment = document.getElementById("fComment").value.trim();
   const imageUrl = document.getElementById("fImageUrl").value.trim();
   const portions = document.getElementById("fPortions").value.trim();
 
@@ -3287,7 +3306,8 @@ document.getElementById("recipeForm").addEventListener("submit", async (e) => {
       ingredients,
       instructions,
       sourceUrl: fetchedSourceUrl || "",
-      videoId: fetchedVideoId || ""
+      videoId: fetchedVideoId || "",
+      comment
     };
     if(editingRecipeId){
       await updateRecipe(editingRecipeId, payload);
